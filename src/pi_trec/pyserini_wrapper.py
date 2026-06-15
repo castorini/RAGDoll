@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -13,18 +12,19 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from pi_trec.config import PyseriniServeConfig, PyseriniWrapperConfig
 
-@dataclass(frozen=True)
-class PyseriniWrapperConfig:
-    pyserini_base_url: str
-    pyserini_index: str
-    backend_id: str = "pyserini-http"
-    default_limit: int = 10
-    max_page_size: int = 100
-    read_limit: int = 200
-    search_word_limit: int = 512
-    read_word_limit: int = 4096
-    token_env: str = "PYSERINI_API_TOKEN"
+# PyseriniWrapperConfig now lives in pi_trec.config and is re-exported here so
+# existing imports keep working.
+__all__ = [
+    "PyseriniServeConfig",
+    "PyseriniWrapperConfig",
+    "build_pi_search_http_json_config",
+    "make_pyserini_wrapper_handler",
+    "read_pyserini_document",
+    "search_pyserini",
+    "serve_pyserini_wrapper",
+]
 
 
 def build_pi_search_http_json_config(
@@ -273,28 +273,18 @@ def make_pyserini_wrapper_handler(config: PyseriniWrapperConfig) -> type[BaseHTT
     return Handler
 
 
-def serve_pyserini_wrapper(args: Any) -> None:
-    config = PyseriniWrapperConfig(
-        pyserini_base_url=args.pyserini_base_url,
-        pyserini_index=args.pyserini_index,
-        backend_id=args.backend_id,
-        default_limit=args.default_limit,
-        max_page_size=args.max_page_size,
-        read_limit=args.read_limit,
-        search_word_limit=args.search_word_limit,
-        read_word_limit=args.read_word_limit,
-        token_env=args.token_env,
-    )
-    wrapper_base_url = f"http://{args.host}:{args.port}"
+def serve_pyserini_wrapper(serve_config: PyseriniServeConfig) -> None:
+    config = serve_config.wrapper_config()
+    wrapper_base_url = f"http://{serve_config.host}:{serve_config.port}"
     pi_search_config = build_pi_search_http_json_config(
         wrapper_base_url=wrapper_base_url,
         backend_id=config.backend_id,
         max_page_size=config.max_page_size,
         max_read_limit=config.read_limit,
     )
-    if args.print_config:
+    if serve_config.print_config:
         print("PI_SEARCH_EXTENSION_CONFIG=" + json.dumps(pi_search_config, separators=(",", ":")))
-    server = ThreadingHTTPServer((args.host, args.port), make_pyserini_wrapper_handler(config))
+    server = ThreadingHTTPServer((serve_config.host, serve_config.port), make_pyserini_wrapper_handler(config))
     print(f"serving pyserini wrapper at {wrapper_base_url}")
     print(f"upstream={config.pyserini_base_url.rstrip('/')}/v1/{config.pyserini_index}")
     try:

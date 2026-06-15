@@ -12,21 +12,31 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from pi_trec.config import (
+    DEFAULT_CANDIDATES_PER_EPISODE,
+    DEFAULT_CATEGORY_COUNT,
+    DEFAULT_EPISODES,
+    DEFAULT_ICL_EXAMPLES,
+    DEFAULT_ICL_SEED,
+    DEFAULT_INFORMAL_STYLE_PROBABILITY,
+    DEFAULT_MAX_SEARCH_CALLS,
+    DEFAULT_MIN_SEARCH_CALLS_PER_CANDIDATE,
+    DEFAULT_MIN_UNIQUE_CITED_DOCIDS,
+    DEFAULT_SEARCH_TOPK,
+    DEFAULT_TOPIC_CATEGORY_SEED,
+    TopicsCategoryTaskConfig,
+    TopicsGenerateConfig,
+    TopicsMaterializeConfig,
+    TopicsParseCategoriesConfig,
+    TopicsParseConfig,
+    TopicsReportConfig,
+)
 from pi_trec.jsonl import append_jsonl, read_jsonl, write_jsonl
 from pi_trec.prompts import PI_SEARCH_SYSTEM_PROMPT
-from pi_trec.runner import LocalAgentConfig, run_prompt, select_rows
+from pi_trec.runner import run_prompt, select_rows
 
-DEFAULT_EPISODES = 200
-DEFAULT_CANDIDATES_PER_EPISODE = 1
-DEFAULT_MAX_SEARCH_CALLS = 50
-DEFAULT_SEARCH_TOPK = 20
-DEFAULT_MIN_UNIQUE_CITED_DOCIDS = 8
-DEFAULT_MIN_SEARCH_CALLS_PER_CANDIDATE = 8
-DEFAULT_ICL_EXAMPLES = 4
-DEFAULT_ICL_SEED = 13
-DEFAULT_TOPIC_CATEGORY_SEED = 13
-DEFAULT_INFORMAL_STYLE_PROBABILITY = 0.25
-DEFAULT_CATEGORY_COUNT = 200
+# The DEFAULT_* values above are re-exported from pi_trec.config (single source
+# of truth) so existing imports and the CLI keep working unchanged.
 REFERENCE_ANSWER_PLACEHOLDER = "<comprehensive grounded reference answer with sentence-level raw-document-id citations>"
 
 JSON_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL | re.IGNORECASE)
@@ -372,74 +382,63 @@ def iter_tasks(
     ]
 
 
-def materialize(args: Any) -> None:
-    _require_positive("episodes", args.episodes)
-    _require_positive("candidates-per-episode", args.candidates_per_episode)
-    _require_positive("max-search-calls", args.max_search_calls)
-    _require_positive("search-topk", args.search_topk)
-    _require_positive("min-unique-cited-docids", args.min_unique_cited_docids)
-    _require_positive("min-search-calls-per-candidate", args.min_search_calls_per_candidate)
-    _require_positive("icl-examples", args.icl_examples)
-    _require_probability("informal-style-probability", args.informal_style_probability)
-    if args.icl_source == "researchrubrics" and args.researchrubrics_path is None:
+def materialize(config: TopicsMaterializeConfig) -> None:
+    _require_positive("episodes", config.episodes)
+    _require_positive("candidates-per-episode", config.candidates_per_episode)
+    _require_positive("max-search-calls", config.max_search_calls)
+    _require_positive("search-topk", config.search_topk)
+    _require_positive("min-unique-cited-docids", config.min_unique_cited_docids)
+    _require_positive("min-search-calls-per-candidate", config.min_search_calls_per_candidate)
+    _require_positive("icl-examples", config.icl_examples)
+    _require_probability("informal-style-probability", config.informal_style_probability)
+    if config.icl_source == "researchrubrics" and config.researchrubrics_path is None:
         raise SystemExit("--researchrubrics-path is required when --icl-source=researchrubrics")
-    icl_pool = load_researchrubrics_examples(args.researchrubrics_path) if args.icl_source == "researchrubrics" else ICL_EXAMPLES
-    topic_categories = load_topic_categories(args.topic_categories) if args.topic_categories else None
+    icl_pool = load_researchrubrics_examples(config.researchrubrics_path) if config.icl_source == "researchrubrics" else ICL_EXAMPLES
+    topic_categories = load_topic_categories(config.topic_categories) if config.topic_categories else None
     tasks = iter_tasks(
-        episodes=args.episodes,
-        candidates_per_episode=args.candidates_per_episode,
-        max_search_calls=args.max_search_calls,
-        search_topk=args.search_topk,
-        min_unique_cited_docids=args.min_unique_cited_docids,
-        min_search_calls_per_candidate=args.min_search_calls_per_candidate,
-        informal_style_probability=args.informal_style_probability,
+        episodes=config.episodes,
+        candidates_per_episode=config.candidates_per_episode,
+        max_search_calls=config.max_search_calls,
+        search_topk=config.search_topk,
+        min_unique_cited_docids=config.min_unique_cited_docids,
+        min_search_calls_per_candidate=config.min_search_calls_per_candidate,
+        informal_style_probability=config.informal_style_probability,
         topic_categories=topic_categories,
-        topic_category_seed=args.topic_category_seed,
+        topic_category_seed=config.topic_category_seed,
         icl_pool=icl_pool,
-        icl_source=args.icl_source,
-        icl_examples_per_episode=args.icl_examples,
-        icl_seed=args.icl_seed,
+        icl_source=config.icl_source,
+        icl_examples_per_episode=config.icl_examples,
+        icl_seed=config.icl_seed,
     )
-    count = write_jsonl(args.output_file, tasks)
-    print(f"wrote={count} output={args.output_file}")
+    count = write_jsonl(config.output_file, tasks)
+    print(f"wrote={count} output={config.output_file}")
 
 
-async def generate(args: Any) -> None:
-    if args.overwrite:
-        if args.output_file.exists():
-            args.output_file.unlink()
-        if args.failed_output and args.failed_output.exists():
-            args.failed_output.unlink()
+async def generate(config: TopicsGenerateConfig) -> None:
+    if config.overwrite:
+        if config.output_file.exists():
+            config.output_file.unlink()
+        if config.failed_output and config.failed_output.exists():
+            config.failed_output.unlink()
     rows = select_rows(
-        list(read_jsonl(args.input_file)),
-        output=args.output_file,
-        resume=args.resume,
-        overwrite=args.overwrite,
-        shuffle=args.shuffle,
-        seed=args.seed,
-        limit=args.limit,
+        list(read_jsonl(config.input_file)),
+        output=config.output_file,
+        resume=config.resume,
+        overwrite=config.overwrite,
+        shuffle=config.shuffle,
+        seed=config.seed,
+        limit=config.limit,
     )
-    system_prompt = args.system_prompt
-    if args.extension_path is not None and system_prompt == "":
+    system_prompt = config.system_prompt
+    if config.extension_path is not None and system_prompt == "":
         system_prompt = PI_SEARCH_SYSTEM_PROMPT
-    config = LocalAgentConfig(
-        agent_binary=args.agent_binary,
-        provider=args.provider,
-        model=args.model,
-        thinking=args.thinking,
-        timeout_seconds=args.timeout_seconds,
-        agent_state_dir=args.agent_state_dir,
-        system_prompt=system_prompt,
-        extension_path=args.extension_path,
-        extension_cwd=args.extension_cwd,
-        extension_env=dict(args.extension_env or []),
-    )
-    raw_events_dir = args.raw_events_dir or args.output_file.parent / "raw-events" / args.output_file.stem
-    semaphore = asyncio.Semaphore(max(1, args.max_concurrency))
+    agent_config = replace(config.local_agent_config(), system_prompt=system_prompt)
+    raw_events_dir = config.raw_events_dir or config.output_file.parent / "raw-events" / config.output_file.stem
+    semaphore = asyncio.Semaphore(max(1, config.max_concurrency))
 
     async def one(row: dict[str, Any]) -> dict[str, Any]:
         async with semaphore:
-            row_config = replace(config, system_prompt=str(row.get("system_prompt", config.system_prompt)))
+            row_config = replace(agent_config, system_prompt=str(row.get("system_prompt", agent_config.system_prompt)))
             return await run_prompt(
                 task_id=str(row["task_id"]),
                 evaluator="topics-generate",
@@ -453,35 +452,35 @@ async def generate(args: Any) -> None:
     for future in asyncio.as_completed(pending):
         result = await future
         if result["status"] == "completed":
-            append_jsonl(args.output_file, result)
-        elif args.failed_output:
-            append_jsonl(args.failed_output, result)
+            append_jsonl(config.output_file, result)
+        elif config.failed_output:
+            append_jsonl(config.failed_output, result)
         print(f"{result['status']} task_id={result['task_id']}", flush=True)
-    print(f"processed={len(rows)} output={args.output_file} raw_events_dir={raw_events_dir}")
+    print(f"processed={len(rows)} output={config.output_file} raw_events_dir={raw_events_dir}")
 
 
-def parse(args: Any) -> None:
-    if args.candidates_per_episode <= 0:
+def parse(config: TopicsParseConfig) -> None:
+    if config.candidates_per_episode <= 0:
         raise SystemExit("--candidates-per-episode must be a positive integer")
-    existing_prompts = [] if args.skip_existing_dedup else load_existing_prompts(args.existing_prompt_file)
+    existing_prompts = [] if config.skip_existing_dedup else load_existing_prompts(config.existing_prompt_file)
     accepted, rejected, summary = process_results(
-        list(read_jsonl(args.input_file)),
-        candidates_per_episode=args.candidates_per_episode,
+        list(read_jsonl(config.input_file)),
+        candidates_per_episode=config.candidates_per_episode,
         existing_prompts=existing_prompts,
     )
-    write_jsonl(args.output_file, accepted)
-    write_jsonl(args.rejected_output, rejected)
-    args.summary_output.parent.mkdir(parents=True, exist_ok=True)
-    args.summary_output.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"accepted={len(accepted)} rejected={len(rejected)} output={args.output_file} summary={args.summary_output}")
+    write_jsonl(config.output_file, accepted)
+    write_jsonl(config.rejected_output, rejected)
+    config.summary_output.parent.mkdir(parents=True, exist_ok=True)
+    config.summary_output.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"accepted={len(accepted)} rejected={len(rejected)} output={config.output_file} summary={config.summary_output}")
 
 
-def report(args: Any) -> None:
-    rows = list(read_jsonl(args.input_file))
-    summary = load_summary(args.summary_input)
-    args.output_file.parent.mkdir(parents=True, exist_ok=True)
-    args.output_file.write_text(render_report(rows, summary), encoding="utf-8")
-    print(f"wrote report={args.output_file}")
+def report(config: TopicsReportConfig) -> None:
+    rows = list(read_jsonl(config.input_file))
+    summary = load_summary(config.summary_input)
+    config.output_file.parent.mkdir(parents=True, exist_ok=True)
+    config.output_file.write_text(render_report(rows, summary), encoding="utf-8")
+    print(f"wrote report={config.output_file}")
 
 
 def _strip_json_fence(text: str) -> str:
@@ -843,16 +842,16 @@ def load_researchrubrics_prompts(path: Path) -> list[dict[str, str]]:
     return prompts
 
 
-def category_task(args: Any) -> None:
-    _require_positive("category-count", args.category_count)
-    examples = load_researchrubrics_prompts(args.researchrubrics_path)
+def category_task(config: TopicsCategoryTaskConfig) -> None:
+    _require_positive("category-count", config.category_count)
+    examples = load_researchrubrics_prompts(config.researchrubrics_path)
     task = category_task_row(
-        instruction=render_category_prompt(examples=examples, category_count=args.category_count),
-        category_count=args.category_count,
+        instruction=render_category_prompt(examples=examples, category_count=config.category_count),
+        category_count=config.category_count,
         input_count=len(examples),
     )
-    count = write_jsonl(args.output_file, [task])
-    print(f"wrote={count} output={args.output_file} researchrubrics_prompts={len(examples)}")
+    count = write_jsonl(config.output_file, [task])
+    print(f"wrote={count} output={config.output_file} researchrubrics_prompts={len(examples)}")
 
 
 def normalize_category(line: str) -> str:
@@ -887,17 +886,17 @@ def completed_output_text(rows: list[dict[str, Any]]) -> str:
     return output_text
 
 
-def parse_categories(args: Any) -> None:
-    _require_positive("category-count", args.category_count)
-    categories = parse_categories_text(completed_output_text(list(read_jsonl(args.input_file))))
-    if len(categories) != args.category_count:
-        raise SystemExit(f"expected {args.category_count} unique categories, parsed {len(categories)}")
-    args.output_file.parent.mkdir(parents=True, exist_ok=True)
-    args.output_file.write_text("\n".join(categories) + "\n", encoding="utf-8")
-    summary = {"input": str(args.input_file), "output": str(args.output_file), "categories": len(categories)}
-    args.summary_output.parent.mkdir(parents=True, exist_ok=True)
-    args.summary_output.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"wrote={len(categories)} output={args.output_file} summary={args.summary_output}")
+def parse_categories(config: TopicsParseCategoriesConfig) -> None:
+    _require_positive("category-count", config.category_count)
+    categories = parse_categories_text(completed_output_text(list(read_jsonl(config.input_file))))
+    if len(categories) != config.category_count:
+        raise SystemExit(f"expected {config.category_count} unique categories, parsed {len(categories)}")
+    config.output_file.parent.mkdir(parents=True, exist_ok=True)
+    config.output_file.write_text("\n".join(categories) + "\n", encoding="utf-8")
+    summary = {"input": str(config.input_file), "output": str(config.output_file), "categories": len(categories)}
+    config.summary_output.parent.mkdir(parents=True, exist_ok=True)
+    config.summary_output.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"wrote={len(categories)} output={config.output_file} summary={config.summary_output}")
 
 
 def _require_positive(name: str, value: int) -> None:

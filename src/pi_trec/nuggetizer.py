@@ -8,6 +8,18 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from pi_trec.config import (
+    DEFAULT_MAX_TRIALS,
+    DEFAULT_WINDOW_SIZE,
+    LocalAgentConfig,
+    MaterializeNuggetAgenticCreateConfig,
+    MaterializeNuggetAssignConfig,
+    MaterializeNuggetCreateConfig,
+    MaterializeNuggetScoreConfig,
+    NuggetAgenticCreateConfig,
+    NuggetAssignConfig,
+    NuggetCreateConfig,
+)
 from pi_trec.jsonl import append_jsonl, read_jsonl, write_jsonl
 from pi_trec.prompts import (
     NUGGET_AGENTIC_CREATOR_SYSTEM,
@@ -22,7 +34,21 @@ from pi_trec.prompts import (
     list_text,
     parse_label_list,
 )
-from pi_trec.runner import LocalAgentConfig, run_prompt, select_rows
+from pi_trec.runner import run_prompt, select_rows
+
+# DEFAULT_WINDOW_SIZE / DEFAULT_MAX_TRIALS now live in pi_trec.config and are
+# re-exported above so existing imports (and the CLI) keep working.
+
+
+def iter_window_bounds(total: int, window_size: int) -> list[tuple[int, int]]:
+    """`[start, end)` windows over `total` items, at most `window_size` per window.
+
+    Mirrors the reference `_iter_window_bounds`: the creator slides over
+    documents, the scorer and assigner slide over nuggets, one window per call.
+    """
+    if window_size <= 0:
+        raise ValueError(f"window_size must be a positive integer, got {window_size}")
+    return [(start, min(start + window_size, total)) for start in range(0, total, window_size)]
 
 
 def normalize_query(query: Any) -> tuple[str, str]:
@@ -47,7 +73,7 @@ def candidate_text(candidate: Any) -> str:
 
 def create_context(candidates: list[Any]) -> str:
     parts = [candidate_text(candidate) for candidate in candidates]
-    return "\n\n".join(f"Document {index}:\n{text}" for index, text in enumerate(parts, start=1))
+    return "\n".join(f"[{index}] {text}" for index, text in enumerate(parts, start=1))
 
 
 def render_create_prompt(
@@ -124,12 +150,38 @@ def iter_create_tasks(records: list[dict[str, Any]], *, creator_max_nuggets: int
     return tasks
 
 
-def materialize_create(args: Any) -> None:
+def iter_create_inputs(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Per-record creation inputs for the windowed runtime (raw candidates kept).
+
+    Unlike `iter_create_tasks` (which renders a single full-context prompt for
+    materialization/debugging), the runtime windows over `candidates`, so it
+    keeps the raw candidate list rather than a pre-rendered context.
+    """
+    inputs: list[dict[str, Any]] = []
+    for index, record in enumerate(records, start=1):
+        qid, query = normalize_query(record.get("query"))
+        candidates = record.get("candidates")
+        if not isinstance(candidates, list):
+            raise ValueError("Nuggetizer create input requires `candidates` as a list")
+        task_id = str(record.get("task_id") or qid or f"record{index:06d}")
+        inputs.append(
+            {
+                "task_id": task_id,
+                "qid": qid,
+                "query": query,
+                "candidates": candidates,
+                "initial_nuggets": list_text(record.get("nuggets")),
+            }
+        )
+    return inputs
+
+
+def materialize_create(config: MaterializeNuggetCreateConfig) -> None:
     count = write_jsonl(
-        args.output_file,
-        iter_create_tasks(list(read_jsonl(args.input_file)), creator_max_nuggets=args.max_nuggets),
+        config.output_file,
+        iter_create_tasks(list(read_jsonl(config.input_file)), creator_max_nuggets=config.max_nuggets),
     )
-    print(f"wrote={count} output={args.output_file}")
+    print(f"wrote={count} output={config.output_file}")
 
 
 def iter_agentic_create_tasks(records: list[dict[str, Any]], *, creator_max_nuggets: int) -> list[dict[str, Any]]:
@@ -154,17 +206,17 @@ def iter_agentic_create_tasks(records: list[dict[str, Any]], *, creator_max_nugg
     return tasks
 
 
-def materialize_agentic_create(args: Any) -> None:
+def materialize_agentic_create(config: MaterializeNuggetAgenticCreateConfig) -> None:
     count = write_jsonl(
-        args.output_file,
-        iter_agentic_create_tasks(list(read_jsonl(args.input_file)), creator_max_nuggets=args.max_nuggets),
+        config.output_file,
+        iter_agentic_create_tasks(list(read_jsonl(config.input_file)), creator_max_nuggets=config.max_nuggets),
     )
-    print(f"wrote={count} output={args.output_file}")
+    print(f"wrote={count} output={config.output_file}")
 
 
-def materialize_score(args: Any) -> None:
+def materialize_score(config: MaterializeNuggetScoreConfig) -> None:
     rows = []
-    for record in read_jsonl(args.input_file):
+    for record in read_jsonl(config.input_file):
         qid = str(record.get("qid", "q0"))
         query = str(record.get("query", ""))
         nuggets = list_text(record.get("nuggets"))
@@ -177,8 +229,8 @@ def materialize_score(args: Any) -> None:
                 "metadata": {"qid": qid, "query": query, "nuggets": nuggets},
             }
         )
-    count = write_jsonl(args.output_file, rows)
-    print(f"wrote={count} output={args.output_file}")
+    count = write_jsonl(config.output_file, rows)
+    print(f"wrote={count} output={config.output_file}")
 
 
 def direct_assign_inputs(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -260,107 +312,282 @@ def iter_assign_tasks(assign_inputs: list[dict[str, Any]], *, assign_mode: str) 
     ]
 
 
-def materialize_assign(args: Any) -> None:
-    inputs = _load_assign_payloads(args)
-    count = write_jsonl(args.output_file, iter_assign_tasks(inputs, assign_mode=args.assign_mode))
-    print(f"wrote={count} output={args.output_file}")
+def materialize_assign(config: MaterializeNuggetAssignConfig) -> None:
+    inputs = _load_assign_payloads(config)
+    count = write_jsonl(config.output_file, iter_assign_tasks(inputs, assign_mode=config.assign_mode))
+    print(f"wrote={count} output={config.output_file}")
 
 
-def _load_assign_payloads(args: Any) -> list[dict[str, Any]]:
-    if args.input_json:
-        return direct_assign_inputs(json.loads(args.input_json))
+def _load_assign_payloads(config: NuggetAssignConfig | MaterializeNuggetAssignConfig) -> list[dict[str, Any]]:
+    if config.input_json:
+        return direct_assign_inputs(json.loads(config.input_json))
     payloads: list[dict[str, Any]] = []
-    for row in read_jsonl(args.input_file):
+    for row in read_jsonl(config.input_file):
         payloads.extend(direct_assign_inputs(row))
     return payloads
 
 
-async def create(args: Any) -> None:
-    if args.overwrite and args.output_file.exists():
-        args.output_file.unlink()
-    config = _config(args)
-    raw_events_dir = args.raw_events_dir or args.output_file.parent / "raw-events" / args.output_file.stem
-    tasks = iter_create_tasks(list(read_jsonl(args.input_file)), creator_max_nuggets=args.max_nuggets)
-    if args.limit is not None:
-        tasks = tasks[: args.limit]
-    for task in tasks:
-        created = await run_prompt(
-            task_id=f"{task['task_id']}:create",
+async def _generate_labels(
+    *,
+    task_id: str,
+    evaluator: str,
+    instruction: str,
+    system_prompt: str,
+    raw_events_dir: Path,
+    config: LocalAgentConfig,
+    metadata: dict[str, Any],
+    expected_length: int | None,
+    max_trials: int,
+) -> dict[str, Any]:
+    """Run a label-list prompt, retrying on a parse miss.
+
+    Mirrors the reference temperature-bump retry loop. Through the Pi CLI a retry
+    is a plain re-run (the default reasoning model ignores temperature, so no
+    temperature is plumbed). Returns ``{"labels", "result", "status"}`` where
+    status is one of:
+
+    - ``"parsed"``: a list was parsed (matching ``expected_length`` when given);
+    - ``"parse_exhausted"``: every trial completed but none parsed;
+    - ``"provider_error"``: a trial failed to complete (no parse-retry, matching
+      the reference, which lets provider errors short-circuit the parse loop).
+    """
+    last: dict[str, Any] | None = None
+    for trial in range(max(1, max_trials)):
+        result = await run_prompt(
+            task_id=task_id if trial == 0 else f"{task_id}:t{trial}",
+            evaluator=evaluator,
+            instruction=instruction,
+            raw_events_dir=raw_events_dir,
+            config=replace(config, system_prompt=system_prompt),
+            metadata=metadata,
+        )
+        last = result
+        if result["status"] != "completed":
+            return {"labels": None, "result": result, "status": "provider_error"}
+        labels = parse_label_list(result["output_text"])
+        if labels is not None and (expected_length is None or len(labels) == expected_length):
+            return {"labels": labels, "result": result, "status": "parsed"}
+    return {"labels": None, "result": last, "status": "parse_exhausted"}
+
+
+async def _create_windowed(
+    *,
+    base_task_id: str,
+    qid: str,
+    query: str,
+    candidates: list[Any],
+    initial_nuggets: list[str],
+    agent_config: LocalAgentConfig,
+    raw_events_dir: Path,
+    window_size: int,
+    max_trials: int,
+    max_nuggets: int,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Fold document windows into a running nugget list (reference creator loop)."""
+    nuggets = list(initial_nuggets)
+    traces: list[dict[str, Any]] = []
+    for index, (start, end) in enumerate(iter_window_bounds(len(candidates), window_size)):
+        window = candidates[start:end]
+        outcome = await _generate_labels(
+            task_id=f"{base_task_id}:create:w{index}",
             evaluator="nugget-create",
-            instruction=task["instruction"],
+            instruction=render_create_prompt(
+                query=query,
+                context=create_context(window),
+                nuggets=nuggets,
+                creator_max_nuggets=max_nuggets,
+            ),
+            system_prompt=NUGGET_CREATOR_SYSTEM,
             raw_events_dir=raw_events_dir,
-            config=replace(config, system_prompt=task["system_prompt"]),
-            metadata=task["metadata"],
+            config=agent_config,
+            metadata={"qid": qid, "query": query, "window": [start, end]},
+            expected_length=None,
+            max_trials=max_trials,
         )
-        nuggets = parse_label_list(created["output_text"]) or []
-        score_prompt = render_score_prompt(query=task["metadata"]["query"], nuggets=nuggets)
-        scored = await run_prompt(
-            task_id=f"{task['task_id']}:score",
+        traces.append(outcome["result"])
+        if outcome["status"] == "parsed":
+            nuggets = outcome["labels"][:max_nuggets]
+        # parse_exhausted / provider_error: keep the nuggets gathered so far.
+    return nuggets, traces
+
+
+async def _score_windowed(
+    *,
+    base_task_id: str,
+    qid: str,
+    query: str,
+    nuggets: list[str],
+    agent_config: LocalAgentConfig,
+    raw_events_dir: Path,
+    window_size: int,
+    max_trials: int,
+) -> tuple[list[tuple[str, str]], list[dict[str, Any]]]:
+    """Label nugget importance in windows (reference scorer loop)."""
+    score_config = replace(agent_config, extension_path=None, extension_cwd=None, extension_env=None)
+    scored: list[tuple[str, str]] = []
+    traces: list[dict[str, Any]] = []
+    for index, (start, end) in enumerate(iter_window_bounds(len(nuggets), window_size)):
+        window = nuggets[start:end]
+        outcome = await _generate_labels(
+            task_id=f"{base_task_id}:score:w{index}",
             evaluator="nugget-score",
-            instruction=score_prompt,
+            instruction=render_score_prompt(query=query, nuggets=window),
+            system_prompt=NUGGET_SCORER_SYSTEM,
             raw_events_dir=raw_events_dir,
-            config=replace(config, system_prompt=NUGGET_SCORER_SYSTEM),
-            metadata={**task["metadata"], "nuggets": nuggets},
+            config=score_config,
+            metadata={"qid": qid, "query": query, "nuggets": window},
+            expected_length=len(window),
+            max_trials=max_trials,
         )
-        labels = parse_label_list(scored["output_text"]) or []
-        if len(labels) != len(nuggets):
-            labels = ["okay"] * len(nuggets)
-        row = {
-            "qid": task["metadata"]["qid"],
-            "query": task["metadata"]["query"],
-            "nuggets": [
-                {"text": nugget, "importance": label if label in {"vital", "okay"} else "okay"}
-                for nugget, label in zip(nuggets, labels, strict=False)
-            ],
+        traces.append(outcome["result"])
+        if outcome["status"] == "parsed":
+            labels = [label.strip().lower() for label in outcome["labels"]]
+        elif outcome["status"] == "parse_exhausted":
+            labels = ["okay"] * len(window)
+        else:  # provider_error: drop this window (reference scorer returns []).
+            continue
+        scored.extend(zip(window, labels, strict=False))
+    return scored, traces
+
+
+async def _assign_windowed(
+    *,
+    base_task_id: str,
+    query: str,
+    context: str,
+    nuggets: list[dict[str, Any]],
+    assign_mode: str,
+    agent_config: LocalAgentConfig,
+    raw_events_dir: Path,
+    window_size: int,
+    max_trials: int,
+) -> tuple[list[tuple[dict[str, Any], str]], list[dict[str, Any]]]:
+    """Label nugget support against a passage in windows (reference assigner loop)."""
+    assign_config = replace(agent_config, extension_path=None, extension_cwd=None, extension_env=None)
+    assigned: list[tuple[dict[str, Any], str]] = []
+    traces: list[dict[str, Any]] = []
+    for index, (start, end) in enumerate(iter_window_bounds(len(nuggets), window_size)):
+        window = nuggets[start:end]
+        outcome = await _generate_labels(
+            task_id=f"{base_task_id}:assign:w{index}",
+            evaluator="nugget-assign",
+            instruction=render_assign_prompt(
+                query=query,
+                context=context,
+                nuggets=[nugget["text"] for nugget in window],
+                assign_mode=assign_mode,
+            ),
+            system_prompt=NUGGET_ASSIGNER_SYSTEM,
+            raw_events_dir=raw_events_dir,
+            config=assign_config,
+            metadata={"query": query, "context": context, "nuggets": window},
+            expected_length=len(window),
+            max_trials=max_trials,
+        )
+        traces.append(outcome["result"])
+        if outcome["status"] == "parsed":
+            labels = [label.strip().lower() for label in outcome["labels"]]
+        else:  # parse_exhausted / provider_error: mark the window failed.
+            labels = ["failed"] * len(window)
+        assigned.extend(zip(window, labels, strict=False))
+    return assigned, traces
+
+
+async def create(config: NuggetCreateConfig) -> None:
+    if config.overwrite and config.output_file.exists():
+        config.output_file.unlink()
+    agent_config = config.local_agent_config()
+    raw_events_dir = config.raw_events_dir or config.output_file.parent / "raw-events" / config.output_file.stem
+    inputs = iter_create_inputs(list(read_jsonl(config.input_file)))
+    if config.limit is not None:
+        inputs = inputs[: config.limit]
+    for item in inputs:
+        nuggets, creator_traces = await _create_windowed(
+            base_task_id=item["task_id"],
+            qid=item["qid"],
+            query=item["query"],
+            candidates=item["candidates"],
+            initial_nuggets=item["initial_nuggets"],
+            agent_config=agent_config,
+            raw_events_dir=raw_events_dir,
+            window_size=config.window_size,
+            max_trials=config.max_trials,
+            max_nuggets=config.max_nuggets,
+        )
+        scored, scorer_traces = await _score_windowed(
+            base_task_id=item["task_id"],
+            qid=item["qid"],
+            query=item["query"],
+            nuggets=nuggets,
+            agent_config=agent_config,
+            raw_events_dir=raw_events_dir,
+            window_size=config.window_size,
+            max_trials=config.max_trials,
+        )
+        row: dict[str, Any] = {
+            "qid": item["qid"],
+            "query": item["query"],
+            "nuggets": [{"text": text, "importance": importance} for text, importance in scored],
         }
-        if args.include_trace:
-            row["creator_trace"] = created
-            row["scorer_trace"] = scored
-        append_jsonl(args.output_file, row)
-        print(f"completed task_id={task['task_id']}", flush=True)
-    print(f"processed={len(tasks)} output={args.output_file} raw_events_dir={raw_events_dir}")
+        if config.include_trace:
+            row["creator_trace"] = creator_traces
+            row["scorer_trace"] = scorer_traces
+        append_jsonl(config.output_file, row)
+        print(f"completed task_id={item['task_id']}", flush=True)
+    print(f"processed={len(inputs)} output={config.output_file} raw_events_dir={raw_events_dir}")
 
 
-async def agentic_create(args: Any) -> None:
-    if args.overwrite:
-        if args.output_file.exists():
-            args.output_file.unlink()
-        if args.failed_output and args.failed_output.exists():
-            args.failed_output.unlink()
+async def agentic_create(config: NuggetAgenticCreateConfig) -> None:
+    if config.overwrite:
+        if config.output_file.exists():
+            config.output_file.unlink()
+        if config.failed_output and config.failed_output.exists():
+            config.failed_output.unlink()
     tasks = select_rows(
-        iter_agentic_create_tasks(list(read_jsonl(args.input_file)), creator_max_nuggets=args.max_nuggets),
-        output=args.output_file,
-        resume=args.resume,
-        overwrite=args.overwrite,
-        shuffle=args.shuffle,
-        seed=args.seed,
-        limit=args.limit,
+        iter_agentic_create_tasks(list(read_jsonl(config.input_file)), creator_max_nuggets=config.max_nuggets),
+        output=config.output_file,
+        resume=config.resume,
+        overwrite=config.overwrite,
+        shuffle=config.shuffle,
+        seed=config.seed,
+        limit=config.limit,
     )
-    config = _config(args)
-    raw_events_dir = args.raw_events_dir or args.output_file.parent / "raw-events" / args.output_file.stem
-    semaphore = asyncio.Semaphore(max(1, args.max_concurrency))
+    agent_config = config.local_agent_config()
+    raw_events_dir = config.raw_events_dir or config.output_file.parent / "raw-events" / config.output_file.stem
+    semaphore = asyncio.Semaphore(max(1, config.max_concurrency))
 
     async def one(task: dict[str, Any]) -> dict[str, Any]:
         async with semaphore:
-            return await _run_agentic_create_task(task, config=config, raw_events_dir=raw_events_dir, args=args)
+            return await _run_agentic_create_task(
+                task,
+                agent_config=agent_config,
+                raw_events_dir=raw_events_dir,
+                max_nuggets=config.max_nuggets,
+                window_size=config.window_size,
+                max_trials=config.max_trials,
+                include_trace=config.include_trace,
+            )
 
     pending = [asyncio.create_task(one(task)) for task in tasks]
     for future in asyncio.as_completed(pending):
         row = await future
         if row["status"] == "completed":
-            append_jsonl(args.output_file, row)
-        elif args.failed_output:
-            append_jsonl(args.failed_output, row)
+            append_jsonl(config.output_file, row)
+        elif config.failed_output:
+            append_jsonl(config.failed_output, row)
         print(f"{row['status']} task_id={row['task_id']}", flush=True)
-    print(f"processed={len(tasks)} output={args.output_file} raw_events_dir={raw_events_dir}")
+    print(f"processed={len(tasks)} output={config.output_file} raw_events_dir={raw_events_dir}")
 
 
 async def _run_agentic_create_task(
     task: dict[str, Any],
     *,
-    config: LocalAgentConfig,
+    agent_config: LocalAgentConfig,
     raw_events_dir: Path,
-    args: Any,
+    max_nuggets: int,
+    window_size: int,
+    max_trials: int,
+    include_trace: bool,
 ) -> dict[str, Any]:
     metadata = task["metadata"]
     created = await run_prompt(
@@ -368,57 +595,52 @@ async def _run_agentic_create_task(
         evaluator="nugget-agentic-create",
         instruction=task["instruction"],
         raw_events_dir=raw_events_dir,
-        config=replace(config, system_prompt=task["system_prompt"]),
+        config=replace(agent_config, system_prompt=task["system_prompt"]),
         metadata=metadata,
     )
     if created["status"] != "completed":
-        return _agentic_failed_row(task=task, error=created["error"] or "agentic creator failed", trace=created, args=args)
+        return _agentic_failed_row(
+            task=task, error=created["error"] or "agentic creator failed", trace=created, include_trace=include_trace
+        )
     nuggets = parse_label_list(created["output_text"])
     if nuggets is None:
         return _agentic_failed_row(
             task=task,
             error="could not parse agentic creator output as a Python list",
             trace=created,
-            args=args,
+            include_trace=include_trace,
         )
-    nuggets = nuggets[: args.max_nuggets]
-    scored = await run_prompt(
-        task_id=f"{task['task_id']}:score",
-        evaluator="nugget-score",
-        instruction=render_score_prompt(query=metadata["query"], nuggets=nuggets),
+    nuggets = nuggets[:max_nuggets]
+    # The agentic creator is a single tool-using session (it does its own
+    # retrieval), but scoring its final nugget list is windowed, matching the
+    # reference scorer.
+    scored, scorer_traces = await _score_windowed(
+        base_task_id=task["task_id"],
+        qid=metadata["qid"],
+        query=metadata["query"],
+        nuggets=nuggets,
+        agent_config=agent_config,
         raw_events_dir=raw_events_dir,
-        config=replace(
-            config,
-            system_prompt=NUGGET_SCORER_SYSTEM,
-            extension_path=None,
-            extension_cwd=None,
-            extension_env=None,
-        ),
-        metadata={**metadata, "nuggets": nuggets},
+        window_size=window_size,
+        max_trials=max_trials,
     )
-    if scored["status"] != "completed":
-        return _agentic_failed_row(task=task, error=scored["error"] or "nugget scorer failed", trace=scored, args=args)
-    labels = parse_label_list(scored["output_text"]) or []
-    if len(labels) != len(nuggets):
-        labels = ["okay"] * len(nuggets)
     row: dict[str, Any] = {
         "task_id": task["task_id"],
         "status": "completed",
         "qid": metadata["qid"],
         "query": metadata["query"],
         "initial_nuggets": metadata["initial_nuggets"],
-        "nuggets": [
-            {"text": nugget, "importance": label if label in {"vital", "okay"} else "okay"}
-            for nugget, label in zip(nuggets, labels, strict=False)
-        ],
+        "nuggets": [{"text": text, "importance": importance} for text, importance in scored],
     }
-    if args.include_trace:
+    if include_trace:
         row["creator_trace"] = created
-        row["scorer_trace"] = scored
+        row["scorer_trace"] = scorer_traces
     return row
 
 
-def _agentic_failed_row(*, task: dict[str, Any], error: str, trace: dict[str, Any], args: Any) -> dict[str, Any]:
+def _agentic_failed_row(
+    *, task: dict[str, Any], error: str, trace: dict[str, Any], include_trace: bool
+) -> dict[str, Any]:
     row: dict[str, Any] = {
         "task_id": task["task_id"],
         "status": "failed",
@@ -426,59 +648,38 @@ def _agentic_failed_row(*, task: dict[str, Any], error: str, trace: dict[str, An
         "error": error,
         "metadata": task["metadata"],
     }
-    if args.include_trace:
+    if include_trace:
         row["trace"] = trace
     return row
 
 
-async def assign(args: Any) -> None:
-    if args.overwrite and args.output_file.exists():
-        args.output_file.unlink()
-    config = _config(args)
-    raw_events_dir = args.raw_events_dir or args.output_file.parent / "raw-events" / args.output_file.stem
-    tasks = iter_assign_tasks(_load_assign_payloads(args), assign_mode=args.assign_mode)
-    if args.limit is not None:
-        tasks = tasks[: args.limit]
-    for task in tasks:
-        result = await run_prompt(
-            task_id=task["task_id"],
-            evaluator="nugget-assign",
-            instruction=task["instruction"],
+async def assign(config: NuggetAssignConfig) -> None:
+    if config.overwrite and config.output_file.exists():
+        config.output_file.unlink()
+    agent_config = config.local_agent_config()
+    raw_events_dir = config.raw_events_dir or config.output_file.parent / "raw-events" / config.output_file.stem
+    items = _load_assign_payloads(config)
+    if config.limit is not None:
+        items = items[: config.limit]
+    for item in items:
+        assigned, traces = await _assign_windowed(
+            base_task_id=item["task_id"],
+            query=item["query"],
+            context=item["context"],
+            nuggets=item["nuggets"],
+            assign_mode=config.assign_mode,
+            agent_config=agent_config,
             raw_events_dir=raw_events_dir,
-            config=replace(config, system_prompt=task["system_prompt"]),
-            metadata=task["metadata"],
+            window_size=config.window_size,
+            max_trials=config.max_trials,
         )
-        labels = parse_label_list(result["output_text"]) or []
-        nuggets = task["metadata"]["nuggets"]
-        if len(labels) != len(nuggets):
-            labels = ["not_support"] * len(nuggets)
         row = {
-            "query": task["metadata"]["query"],
-            "context": task["metadata"]["context"],
-            "nuggets": [
-                {
-                    **nugget,
-                    "assignment": label if label in {"support", "partial_support", "not_support"} else "not_support",
-                }
-                for nugget, label in zip(nuggets, labels, strict=False)
-            ],
+            "query": item["query"],
+            "context": item["context"],
+            "nuggets": [{**nugget, "assignment": assignment} for nugget, assignment in assigned],
         }
-        if args.include_trace:
-            row["trace"] = result
-        append_jsonl(args.output_file, row)
-        print(f"completed task_id={task['task_id']}", flush=True)
-    print(f"processed={len(tasks)} output={args.output_file} raw_events_dir={raw_events_dir}")
-
-
-def _config(args: Any) -> LocalAgentConfig:
-    return LocalAgentConfig(
-        agent_binary=args.agent_binary,
-        model=args.model,
-        thinking=args.thinking,
-        timeout_seconds=args.timeout_seconds,
-        agent_state_dir=args.agent_state_dir,
-        system_prompt=args.system_prompt,
-        extension_path=getattr(args, "extension_path", None),
-        extension_cwd=getattr(args, "extension_cwd", None),
-        extension_env=dict(getattr(args, "extension_env", []) or []),
-    )
+        if config.include_trace:
+            row["trace"] = traces
+        append_jsonl(config.output_file, row)
+        print(f"completed task_id={item['task_id']}", flush=True)
+    print(f"processed={len(items)} output={config.output_file} raw_events_dir={raw_events_dir}")

@@ -2,9 +2,12 @@ from pathlib import Path
 
 from pi_trec.nuggetizer import (
     iter_agentic_create_tasks,
+    create_context,
     direct_assign_inputs,
     iter_assign_tasks,
+    iter_create_inputs,
     iter_create_tasks,
+    iter_window_bounds,
     normalize_nuggets,
     render_agentic_create_prompt,
     render_assign_prompt,
@@ -82,7 +85,26 @@ def test_create_tasks_accept_query_candidate_schema() -> None:
     )
     assert tasks[0]["task_id"] == "q1"
     assert tasks[0]["system_prompt"] == NUGGET_CREATOR_SYSTEM
-    assert "Document 1:\npassage" in tasks[0]["metadata"]["context"]
+    assert "[1] passage" in tasks[0]["metadata"]["context"]
+
+
+def test_create_context_uses_reference_enumeration() -> None:
+    assert create_context(["alpha", {"doc": {"segment": "beta"}}]) == "[1] alpha\n[2] beta"
+
+
+def test_iter_window_bounds_matches_reference() -> None:
+    assert iter_window_bounds(0, 10) == []
+    assert iter_window_bounds(5, 10) == [(0, 5)]
+    assert iter_window_bounds(25, 10) == [(0, 10), (10, 20), (20, 25)]
+
+
+def test_iter_create_inputs_keep_raw_candidates_for_windowing() -> None:
+    inputs = iter_create_inputs(
+        [{"query": {"qid": "q1", "text": "query"}, "candidates": ["a", "b"], "nuggets": [{"text": "seed"}]}]
+    )
+    assert inputs[0]["task_id"] == "q1"
+    assert inputs[0]["candidates"] == ["a", "b"]
+    assert inputs[0]["initial_nuggets"] == ["seed"]
 
 
 def test_agentic_create_prompt_accepts_initial_nuggets() -> None:
@@ -138,6 +160,13 @@ def test_parse_label_list() -> None:
     assert parse_label_list("['support', 'not_support']") == ["support", "not_support"]
     assert parse_label_list("Labels: ['vital']") == ["vital"]
     assert parse_label_list("no list") is None
+
+
+def test_parse_label_list_tolerates_fences_and_bare_words() -> None:
+    assert parse_label_list("```python\n['vital', 'okay']\n```") == ["vital", "okay"]
+    assert parse_label_list("[vital, okay]") == ["vital", "okay"]
+    assert parse_label_list('["a", "b"]') == ["a", "b"]
+    assert parse_label_list("[]") == []
 
 
 def test_normalize_nuggets_preserves_importance() -> None:

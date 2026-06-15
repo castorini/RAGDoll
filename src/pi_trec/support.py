@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from pi_trec.config import MaterializeSupportConfig, SupportJudgeConfig
 from pi_trec.jsonl import append_jsonl, read_jsonl, write_jsonl
 from pi_trec.prompts import SUPPORT_EVAL_PROMPT, parse_support_label
-from pi_trec.runner import LocalAgentConfig, run_prompt
+from pi_trec.runner import run_prompt
 
 
 def render_support_prompt(*, statement: str, citation: str) -> str:
@@ -81,30 +82,20 @@ def _task(*, task_id: str, statement: str, citation: str, source: dict[str, Any]
     }
 
 
-def materialize(args: Any) -> None:
-    count = write_jsonl(args.output_file, iter_support_tasks(list(read_jsonl(args.input_file))))
-    print(f"wrote={count} output={args.output_file}")
+def materialize(config: MaterializeSupportConfig) -> None:
+    count = write_jsonl(config.output_file, iter_support_tasks(list(read_jsonl(config.input_file))))
+    print(f"wrote={count} output={config.output_file}")
 
 
-async def judge(args: Any) -> None:
-    if args.overwrite and args.output_file.exists():
-        args.output_file.unlink()
-    tasks = iter_support_tasks(list(read_jsonl(args.input_file)))
-    if args.limit is not None:
-        tasks = tasks[: args.limit]
-    config = LocalAgentConfig(
-        agent_binary=args.agent_binary,
-        model=args.model,
-        thinking=args.thinking,
-        timeout_seconds=args.timeout_seconds,
-        agent_state_dir=args.agent_state_dir,
-        system_prompt=args.system_prompt,
-        extension_path=getattr(args, "extension_path", None),
-        extension_cwd=getattr(args, "extension_cwd", None),
-        extension_env=dict(getattr(args, "extension_env", []) or []),
-    )
-    raw_events_dir = args.raw_events_dir or args.output_file.parent / "raw-events" / args.output_file.stem
-    semaphore = asyncio.Semaphore(max(1, args.max_concurrency))
+async def judge(config: SupportJudgeConfig) -> None:
+    if config.overwrite and config.output_file.exists():
+        config.output_file.unlink()
+    tasks = iter_support_tasks(list(read_jsonl(config.input_file)))
+    if config.limit is not None:
+        tasks = tasks[: config.limit]
+    agent_config = config.local_agent_config()
+    raw_events_dir = config.raw_events_dir or config.output_file.parent / "raw-events" / config.output_file.stem
+    semaphore = asyncio.Semaphore(max(1, config.max_concurrency))
 
     async def one(task: dict[str, Any]) -> dict[str, Any]:
         async with semaphore:
@@ -113,7 +104,7 @@ async def judge(args: Any) -> None:
                 evaluator="support",
                 instruction=task["instruction"],
                 raw_events_dir=raw_events_dir,
-                config=config,
+                config=agent_config,
                 metadata=task["metadata"],
             )
             label = parse_support_label(result["output_text"]) if result["status"] == "completed" else None
@@ -127,10 +118,10 @@ async def judge(args: Any) -> None:
                 "error": result["error"] if label is not None else result["error"] or "could not parse support label",
                 "metadata": task["metadata"]["source"],
             }
-            if args.include_prompt:
+            if config.include_prompt:
                 row["prompt"] = task["instruction"]
             return row
 
     for future in asyncio.as_completed([asyncio.create_task(one(task)) for task in tasks]):
-        append_jsonl(args.output_file, await future)
-    print(f"processed={len(tasks)} output={args.output_file} raw_events_dir={raw_events_dir}")
+        append_jsonl(config.output_file, await future)
+    print(f"processed={len(tasks)} output={config.output_file} raw_events_dir={raw_events_dir}")

@@ -1,11 +1,10 @@
 import asyncio
 import json
-import sys
-from types import SimpleNamespace
 from pathlib import Path
 
 from pi_trec.runner import (
     LocalAgentConfig,
+    RunConfig,
     build_agent_args,
     extract_assistant_text,
     run_prompt,
@@ -210,7 +209,7 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
         + "\n",
         encoding="utf-8",
     )
-    args = SimpleNamespace(
+    config = RunConfig(
         input_file=input_path,
         output_file=output_path,
         failed_output=None,
@@ -229,6 +228,6 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
         raw_events_dir=None,
         max_concurrency=1,
     )
-    asyncio.run(run_task_rows(args))
+    asyncio.run(run_task_rows(config))
     row = json.loads(output_path.read_text(encoding="utf-8"))
     assert row["status"] == "completed"

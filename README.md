@@ -33,6 +33,36 @@ Nuggetizer is the exception because the source Nuggetizer templates define real 
 
 Useful shared flags include `--agent-binary`, `--model`, `--thinking`, `--max-concurrency`, `--timeout-seconds`, `--raw-events-dir`, `--limit`, and `--overwrite`.
 
+## Configuration (CLI or YAML)
+
+Every subcommand is driven by a typed config object (see `src/pi_trec/config.py`). Values come from three layers, later layers winning:
+
+1. dataclass defaults (the values documented above),
+2. an optional `--config <file>.yaml`,
+3. explicit CLI flags.
+
+So you can keep shared settings in a YAML file and still override individual values on the command line. YAML keys are the snake_case field names (the CLI flag without the leading `--`, dashes as underscores), e.g. `--max-nuggets` is `max_nuggets`:
+
+```yaml
+# umbrela-judge.yaml
+input_file: examples/umbrela.requests.jsonl
+output_file: results/umbrela.judgments.jsonl
+model: openai-codex/gpt-5.5
+thinking: medium
+max_concurrency: 8
+prompt_type: bing
+```
+
+```bash
+# Run entirely from the YAML file:
+uv run pi-trec umbrela judge --config examples/configs/umbrela-judge.yaml
+
+# Same file, but override one value for this run:
+uv run pi-trec umbrela judge --config examples/configs/umbrela-judge.yaml --thinking high
+```
+
+Required fields (such as `input_file`/`output_file`) may be supplied through either the YAML file or CLI flags; a missing required value fails fast with a clear message. Unknown YAML keys are ignored, so one shared file can hold settings for several commands.
+
 ## Pyserini Wrapper for Pi Search
 
 Pi-TREC can expose a Pyserini HTTP endpoint as the Pine-compatible `pi-search` `http-json` backend contract:

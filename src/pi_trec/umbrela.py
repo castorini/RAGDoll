@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any
 
+from pi_trec.config import MaterializeUmbrelaConfig, UmbrelaJudgeConfig
 from pi_trec.jsonl import append_jsonl, read_jsonl, write_jsonl
 from pi_trec.prompts import parse_umbrela_judgment, render_umbrela_prompt
-from pi_trec.runner import LocalAgentConfig, run_prompt
+from pi_trec.runner import run_prompt
 
 
 def query_text(record: dict[str, Any]) -> tuple[str, str | None]:
@@ -67,33 +67,23 @@ def iter_prompt_tasks(records: list[dict[str, Any]], *, prompt_type: str) -> lis
     return tasks
 
 
-def materialize(args: Any) -> None:
-    tasks = iter_prompt_tasks(list(read_jsonl(args.input_file)), prompt_type=args.prompt_type)
-    count = write_jsonl(args.output_file, tasks)
-    print(f"wrote={count} output={args.output_file}")
+def materialize(config: MaterializeUmbrelaConfig) -> None:
+    tasks = iter_prompt_tasks(list(read_jsonl(config.input_file)), prompt_type=config.prompt_type)
+    count = write_jsonl(config.output_file, tasks)
+    print(f"wrote={count} output={config.output_file}")
 
 
-async def judge(args: Any) -> None:
-    if args.overwrite and args.output_file.exists():
-        args.output_file.unlink()
-    if args.overwrite and args.failed_output and args.failed_output.exists():
-        args.failed_output.unlink()
-    tasks = iter_prompt_tasks(list(read_jsonl(args.input_file)), prompt_type=args.prompt_type)
-    if args.limit is not None:
-        tasks = tasks[: args.limit]
-    config = LocalAgentConfig(
-        agent_binary=args.agent_binary,
-        model=args.model,
-        thinking=args.thinking,
-        timeout_seconds=args.timeout_seconds,
-        agent_state_dir=args.agent_state_dir,
-        system_prompt=args.system_prompt,
-        extension_path=getattr(args, "extension_path", None),
-        extension_cwd=getattr(args, "extension_cwd", None),
-        extension_env=dict(getattr(args, "extension_env", []) or []),
-    )
-    raw_events_dir = args.raw_events_dir or args.output_file.parent / "raw-events" / args.output_file.stem
-    semaphore = asyncio.Semaphore(max(1, args.max_concurrency))
+async def judge(config: UmbrelaJudgeConfig) -> None:
+    if config.overwrite and config.output_file.exists():
+        config.output_file.unlink()
+    if config.overwrite and config.failed_output and config.failed_output.exists():
+        config.failed_output.unlink()
+    tasks = iter_prompt_tasks(list(read_jsonl(config.input_file)), prompt_type=config.prompt_type)
+    if config.limit is not None:
+        tasks = tasks[: config.limit]
+    agent_config = config.local_agent_config()
+    raw_events_dir = config.raw_events_dir or config.output_file.parent / "raw-events" / config.output_file.stem
+    semaphore = asyncio.Semaphore(max(1, config.max_concurrency))
 
     async def one(task: dict[str, Any]) -> dict[str, Any]:
         async with semaphore:
@@ -102,7 +92,7 @@ async def judge(args: Any) -> None:
                 evaluator="umbrela",
                 instruction=task["instruction"],
                 raw_events_dir=raw_events_dir,
-                config=config,
+                config=agent_config,
                 metadata=task["metadata"],
             )
             metadata = task["metadata"]
@@ -116,11 +106,11 @@ async def judge(args: Any) -> None:
                 row["qid"] = metadata["qid"]
             if metadata.get("docid") is not None:
                 row["docid"] = metadata["docid"]
-            if args.include_trace:
+            if config.include_trace:
                 row.update(
                     {
                         "task_id": task["task_id"],
-                        "prompt": None if args.redact_prompts else task["instruction"],
+                        "prompt": None if config.redact_prompts else task["instruction"],
                         "prediction": result["output_text"],
                         "result_status": result["status"],
                         "error": result["error"],
@@ -130,5 +120,5 @@ async def judge(args: Any) -> None:
 
     for future in asyncio.as_completed([asyncio.create_task(one(task)) for task in tasks]):
         row = await future
-        append_jsonl(args.output_file, row)
-    print(f"processed={len(tasks)} output={args.output_file} raw_events_dir={raw_events_dir}")
+        append_jsonl(config.output_file, row)
+    print(f"processed={len(tasks)} output={config.output_file} raw_events_dir={raw_events_dir}")

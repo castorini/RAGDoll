@@ -1,0 +1,16 @@
+# Example config for: pi-trec umbrela judge --config examples/configs/umbrela-judge.yaml
+# Keys are the snake_case field names (the CLI flag without the leading "--").
+# Explicit CLI flags override anything set here.
+input_file: examples/umbrela.requests.jsonl
+output_file: results/umbrela.judgments.jsonl
+
+# Pi local-agent settings
+model: openai-codex/gpt-5.5
+thinking: medium
+max_concurrency: 8
+timeout_seconds: 900.0
+
+# UMBRELA-specific settings
+prompt_type: bing
+include_trace: false
+redact_prompts: false

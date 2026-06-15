@@ -9,34 +9,43 @@ import random
 import shutil
 import tempfile
 import time
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Iterable
 
+from pi_trec.config import (
+    DEFAULT_MAX_CONCURRENCY,
+    DEFAULT_MODEL,
+    DEFAULT_PROVIDER,
+    DEFAULT_SYSTEM_PROMPT,
+    DEFAULT_THINKING,
+    DEFAULT_TIMEOUT_SECONDS,
+    LocalAgentConfig,
+    RunConfig,
+)
 from pi_trec.jsonl import append_jsonl, completed_task_ids, read_jsonl
 
-DEFAULT_MODEL = "openai-codex/gpt-5.5"
-DEFAULT_THINKING = "medium"
-DEFAULT_PROVIDER = "pi"
-DEFAULT_TIMEOUT_SECONDS = 900.0
-DEFAULT_MAX_CONCURRENCY = 8
-DEFAULT_SYSTEM_PROMPT = ""
+# Re-exported from pi_trec.config so existing imports keep working.
+__all__ = [
+    "DEFAULT_MAX_CONCURRENCY",
+    "DEFAULT_MODEL",
+    "DEFAULT_PROVIDER",
+    "DEFAULT_SYSTEM_PROMPT",
+    "DEFAULT_THINKING",
+    "DEFAULT_TIMEOUT_SECONDS",
+    "LocalAgentConfig",
+    "RunConfig",
+    "build_agent_args",
+    "extract_assistant_text",
+    "run_prompt",
+    "run_task_rows",
+    "safe_task_filename",
+    "select_rows",
+    "write_system_prompt_extension",
+]
+
 AGENT_STATE_FILENAMES = ("auth.json", "oauth.json", "models.json")
 STDERR_TAIL_MAX_CHARS = 64_000
-
-
-@dataclass(frozen=True)
-class LocalAgentConfig:
-    agent_binary: str = "pi"
-    provider: str = DEFAULT_PROVIDER
-    model: str = DEFAULT_MODEL
-    thinking: str = DEFAULT_THINKING
-    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
-    agent_state_dir: Path | None = None
-    system_prompt: str = DEFAULT_SYSTEM_PROMPT
-    extension_path: Path | None = None
-    extension_cwd: Path | None = None
-    extension_env: dict[str, str] | None = None
 
 
 def build_agent_args(
@@ -354,39 +363,28 @@ def select_rows(
     return selected
 
 
-async def run_task_rows(args: Any) -> None:
-    if args.overwrite:
-        if args.output_file.exists():
-            args.output_file.unlink()
-        if args.failed_output and args.failed_output.exists():
-            args.failed_output.unlink()
+async def run_task_rows(config: RunConfig) -> None:
+    if config.overwrite:
+        if config.output_file.exists():
+            config.output_file.unlink()
+        if config.failed_output and config.failed_output.exists():
+            config.failed_output.unlink()
     rows = select_rows(
-        list(read_jsonl(args.input_file)),
-        output=args.output_file,
-        resume=args.resume,
-        overwrite=args.overwrite,
-        shuffle=args.shuffle,
-        seed=args.seed,
-        limit=args.limit,
+        list(read_jsonl(config.input_file)),
+        output=config.output_file,
+        resume=config.resume,
+        overwrite=config.overwrite,
+        shuffle=config.shuffle,
+        seed=config.seed,
+        limit=config.limit,
     )
-    config = LocalAgentConfig(
-        agent_binary=args.agent_binary,
-        provider=args.provider,
-        model=args.model,
-        thinking=args.thinking,
-        timeout_seconds=args.timeout_seconds,
-        agent_state_dir=args.agent_state_dir,
-        system_prompt=args.system_prompt,
-        extension_path=getattr(args, "extension_path", None),
-        extension_cwd=getattr(args, "extension_cwd", None),
-        extension_env=dict(getattr(args, "extension_env", []) or []),
-    )
-    raw_events_dir = args.raw_events_dir or args.output_file.parent / "raw-events" / args.output_file.stem
-    semaphore = asyncio.Semaphore(max(1, args.max_concurrency))
+    agent_config = config.local_agent_config()
+    raw_events_dir = config.raw_events_dir or config.output_file.parent / "raw-events" / config.output_file.stem
+    semaphore = asyncio.Semaphore(max(1, config.max_concurrency))
 
     async def guarded(row: dict[str, Any]) -> dict[str, Any]:
         async with semaphore:
-            row_config = replace(config, system_prompt=str(row.get("system_prompt", config.system_prompt)))
+            row_config = replace(agent_config, system_prompt=str(row.get("system_prompt", agent_config.system_prompt)))
             return await run_prompt(
                 task_id=str(row["task_id"]),
                 evaluator=str(row.get("evaluator", "generic")),
@@ -400,8 +398,8 @@ async def run_task_rows(args: Any) -> None:
     for future in asyncio.as_completed(pending):
         result = await future
         if result["status"] == "completed":
-            append_jsonl(args.output_file, result)
-        elif args.failed_output:
-            append_jsonl(args.failed_output, result)
+            append_jsonl(config.output_file, result)
+        elif config.failed_output:
+            append_jsonl(config.failed_output, result)
         print(f"{result['status']} task_id={result['task_id']}", flush=True)
-    print(f"processed={len(rows)} output={args.output_file} raw_events_dir={raw_events_dir}")
+    print(f"processed={len(rows)} output={config.output_file} raw_events_dir={raw_events_dir}")

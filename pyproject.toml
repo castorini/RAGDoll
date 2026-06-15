@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Private Pi/Codex runner for RAG evaluation prompts"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pyyaml>=6",
+]
 
 [project.scripts]
 pi-trec = "pi_trec.cli:main"

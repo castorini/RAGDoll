@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import re
 from typing import Any
 
@@ -133,21 +132,67 @@ def render_umbrela_prompt(*, query: str, passage: str, prompt_type: str) -> str:
     raise ValueError(f"unsupported UMBRELA prompt type: {prompt_type}")
 
 
+def clean_response(text: str) -> str:
+    """Strip Markdown code fences and trim (mirrors the reference `_clean_response`)."""
+    return text.replace("```python", "").replace("```", "").strip()
+
+
+_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", '"': '"', "'": "'", "0": "\0"}
+
+
 def parse_label_list(text: str) -> list[str] | None:
-    text = text.strip()
-    try:
-        value = ast.literal_eval(text)
-    except (SyntaxError, ValueError):
-        match = re.search(r"\[[^\]]*\]", text, flags=re.DOTALL)
-        if not match:
-            return None
-        try:
-            value = ast.literal_eval(match.group(0))
-        except (SyntaxError, ValueError):
-            return None
-    if not isinstance(value, list):
+    """Extract a Pythonic list of strings from a model response.
+
+    Faithful port of the reference nuggetizer parser: locate the outermost
+    ``[ ... ]``, then tolerate single- or double-quoted items, bare words, and
+    surrounding prose/code fences. Returns ``None`` when no list can be located.
+    """
+    cleaned = clean_response(text)
+    open_index = cleaned.find("[")
+    close_index = cleaned.rfind("]")
+    if open_index == -1 or close_index == -1 or close_index <= open_index:
         return None
-    return [str(item) for item in value]
+
+    body = cleaned[open_index + 1 : close_index]
+    items: list[str] = []
+    i, n = 0, len(body)
+    while i < n:
+        # Skip separators / whitespace between items.
+        while i < n and (body[i] == "," or body[i].isspace()):
+            i += 1
+        if i >= n:
+            break
+        char = body[i]
+        if char in ("'", '"'):
+            quote = char
+            i += 1
+            buf: list[str] = []
+            closed = False
+            while i < n:
+                current = body[i]
+                if current == "\\" and i + 1 < n:
+                    buf.append(_ESCAPES.get(body[i + 1], body[i + 1]))
+                    i += 2
+                    continue
+                if current == quote:
+                    i += 1
+                    closed = True
+                    break
+                buf.append(current)
+                i += 1
+            if not closed:
+                return None  # unterminated string => malformed list
+            items.append("".join(buf))
+        else:
+            # Bare word (e.g. an unquoted label) up to the next comma.
+            buf = []
+            while i < n and body[i] != ",":
+                buf.append(body[i])
+                i += 1
+            trimmed = "".join(buf).strip()
+            if trimmed:
+                items.append(trimmed)
+    return items
 
 
 def parse_umbrela_judgment(text: str) -> int | None:
