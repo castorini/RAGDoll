@@ -1,0 +1,24 @@
+[project]
+name = "pi-trec"
+version = "0.1.0"
+description = "Private Pi/Codex runner for RAG evaluation prompts"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+pi-trec = "pi_trec.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+

@@ -1,0 +1,147 @@
+from pathlib import Path
+
+from pi_trec.nuggetizer import (
+    iter_agentic_create_tasks,
+    direct_assign_inputs,
+    iter_assign_tasks,
+    iter_create_tasks,
+    normalize_nuggets,
+    render_agentic_create_prompt,
+    render_assign_prompt,
+    render_create_prompt,
+    render_score_prompt,
+)
+from pi_trec.prompts import (
+    NUGGET_AGENTIC_CREATOR_SYSTEM,
+    NUGGET_ASSIGNER_SYSTEM,
+    NUGGET_CREATOR_SYSTEM,
+    NUGGET_SCORER_SYSTEM,
+    parse_label_list,
+)
+
+
+def _yaml_part(path: Path, key: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    marker = f"{key}: "
+    if marker in text and f"{key}: |-" not in text:
+        return text.split(marker, 1)[1].splitlines()[0].strip().strip('"')
+    body = text.split(f"{key}: |-\n", 1)[1]
+    return "\n".join(line[2:] if line.startswith("  ") else line for line in body.splitlines())
+
+
+def test_nugget_create_prompt_matches_source_template() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = root / "nuggetizer" / "src" / "nuggetizer" / "prompts" / "prompt_templates" / "creator_template.yaml"
+    expected_system = _yaml_part(source, "system_message")
+    expected_user = _yaml_part(source, "prefix_user").format(
+        query="q",
+        context="ctx",
+        nuggets=[],
+        nuggets_length=0,
+        creator_max_nuggets=30,
+    )
+    assert expected_system == NUGGET_CREATOR_SYSTEM
+    assert render_create_prompt(query="q", context="ctx") == expected_user
+
+
+def test_nugget_score_prompt_matches_source_template() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = root / "nuggetizer" / "src" / "nuggetizer" / "prompts" / "prompt_templates" / "scorer_template.yaml"
+    expected_system = _yaml_part(source, "system_message")
+    expected_user = _yaml_part(source, "prefix_user").format(query="q", nuggets=["n"], num_nuggets=1)
+    assert expected_system == NUGGET_SCORER_SYSTEM
+    assert render_score_prompt(query="q", nuggets=["n"]) == expected_user
+
+
+def test_nugget_assign_3grade_prompt_matches_source_template() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = root / "nuggetizer" / "src" / "nuggetizer" / "prompts" / "prompt_templates" / "assigner_template.yaml"
+    expected_system = _yaml_part(source, "system_message")
+    expected_user = _yaml_part(source, "prefix_user").format(query="q", context="ctx", nuggets=["n"], num_nuggets=1)
+    assert expected_system == NUGGET_ASSIGNER_SYSTEM
+    assert render_assign_prompt(
+        query="q", context="ctx", nuggets=["n"], assign_mode="support-grade-3"
+    ) == expected_user
+
+
+def test_nugget_assign_2grade_prompt_matches_source_template() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = root / "nuggetizer" / "src" / "nuggetizer" / "prompts" / "prompt_templates" / "assigner_2grade_template.yaml"
+    expected_system = _yaml_part(source, "system_message")
+    expected_user = _yaml_part(source, "prefix_user").format(query="q", context="ctx", nuggets=["n"], num_nuggets=1)
+    assert expected_system == NUGGET_ASSIGNER_SYSTEM
+    assert render_assign_prompt(
+        query="q", context="ctx", nuggets=["n"], assign_mode="support-grade-2"
+    ) == expected_user
+
+
+def test_create_tasks_accept_query_candidate_schema() -> None:
+    tasks = iter_create_tasks(
+        [{"query": {"qid": "q1", "text": "query"}, "candidates": [{"doc": {"segment": "passage"}}]}],
+        creator_max_nuggets=30,
+    )
+    assert tasks[0]["task_id"] == "q1"
+    assert tasks[0]["system_prompt"] == NUGGET_CREATOR_SYSTEM
+    assert "Document 1:\npassage" in tasks[0]["metadata"]["context"]
+
+
+def test_agentic_create_prompt_accepts_initial_nuggets() -> None:
+    prompt = render_agentic_create_prompt(
+        query="what is python used for",
+        nuggets=["web development"],
+        creator_max_nuggets=5,
+    )
+
+    assert "Search Query: what is python used for" in prompt
+    assert "Initial Nugget List: ['web development']" in prompt
+    assert "at most 5 nuggets" in prompt
+    assert "search and read_document tools" in prompt
+
+
+def test_agentic_create_tasks_accept_query_and_initial_nuggets() -> None:
+    tasks = iter_agentic_create_tasks(
+        [{"query": {"qid": "q1", "text": "query"}, "nuggets": [{"text": "seed", "importance": "vital"}]}],
+        creator_max_nuggets=7,
+    )
+
+    assert tasks[0]["task_id"] == "q1"
+    assert tasks[0]["evaluator"] == "nugget-agentic-create"
+    assert tasks[0]["system_prompt"] == NUGGET_AGENTIC_CREATOR_SYSTEM
+    assert tasks[0]["metadata"]["initial_nuggets"] == ["seed"]
+    assert "at most 7 nuggets" in tasks[0]["instruction"]
+
+
+def test_direct_assign_inputs_accepts_direct_and_joined_shapes() -> None:
+    direct = direct_assign_inputs({"query": "q", "context": "ctx", "nuggets": [{"text": "n"}]})
+    assert direct[0]["nugget_texts"] == ["n"]
+    joined = direct_assign_inputs(
+        {
+            "answer_record": {"topic_id": "q1", "topic": "q", "answer": [{"text": "answer"}]},
+            "nugget_record": {"qid": "q1", "query": "q", "nuggets": [{"text": "n"}]},
+        }
+    )
+    assert joined[0]["context"] == "answer"
+    assert joined[0]["nuggets"] == [{"text": "n"}]
+
+
+def test_assign_tasks_materialize() -> None:
+    tasks = iter_assign_tasks(
+        [{"task_id": "t", "query": "q", "context": "ctx", "nuggets": [{"text": "n"}], "nugget_texts": ["n"], "source": {}}],
+        assign_mode="support-grade-3",
+    )
+    assert tasks[0]["evaluator"] == "nugget-assign"
+    assert tasks[0]["system_prompt"] == NUGGET_ASSIGNER_SYSTEM
+    assert "Labels:" in tasks[0]["instruction"]
+
+
+def test_parse_label_list() -> None:
+    assert parse_label_list("['support', 'not_support']") == ["support", "not_support"]
+    assert parse_label_list("Labels: ['vital']") == ["vital"]
+    assert parse_label_list("no list") is None
+
+
+def test_normalize_nuggets_preserves_importance() -> None:
+    assert normalize_nuggets([{"text": "n", "importance": "vital"}, "m"]) == [
+        {"text": "n", "importance": "vital"},
+        {"text": "m"},
+    ]
