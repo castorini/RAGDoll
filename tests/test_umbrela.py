@@ -6,14 +6,11 @@ from pi_trec.umbrela import iter_prompt_tasks
 
 
 def _source_prompt(prompt_type: str) -> str:
-    root = Path(__file__).resolve().parents[3]
     source = (
-        root
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "upstream"
         / "umbrela"
-        / "src"
-        / "umbrela"
-        / "prompts"
-        / "prompt_templates"
         / f"qrel_zeroshot_{prompt_type}.yaml"
     )
     text = source.read_text(encoding="utf-8")

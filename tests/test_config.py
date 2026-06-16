@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from pi_trec.config import (
     RunConfig,
     UmbrelaJudgeConfig,
     load_config_file,
+    load_env_file,
 )
 
 
@@ -161,3 +163,23 @@ def test_cli_missing_required_config_exits(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(sys, "argv", ["pi-trec", "materialize", "umbrela", "--output-file", str(tmp_path / "o.jsonl")])
     with pytest.raises(SystemExit, match="--input-file"):
         main()
+
+
+def test_load_env_file_sets_missing_var(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("PYSERINI_API_TOKEN", raising=False)
+    env_path = tmp_path / ".env"
+    env_path.write_text('# token\nPYSERINI_API_TOKEN="secret"\n', encoding="utf-8")
+    load_env_file(env_path)
+    assert os.environ["PYSERINI_API_TOKEN"] == "secret"
+
+
+def test_load_env_file_does_not_override_shell_env(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PYSERINI_API_TOKEN", "from-shell")
+    env_path = tmp_path / ".env"
+    env_path.write_text("PYSERINI_API_TOKEN=from-file\n", encoding="utf-8")
+    load_env_file(env_path)
+    assert os.environ["PYSERINI_API_TOKEN"] == "from-shell"
+
+
+def test_load_env_file_missing_is_noop(tmp_path: Path) -> None:
+    load_env_file(tmp_path / "absent.env")

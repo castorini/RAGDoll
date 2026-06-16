@@ -5,8 +5,13 @@ from pi_trec.support import iter_support_tasks, render_support_prompt
 
 
 def test_support_prompt_matches_source_script() -> None:
-    root = Path(__file__).resolve().parents[3]
-    source = root / "research" / "external" / "trec2024-rag" / "support_eval" / "code" / "support_evaluation_individual_gpt4o.py"
+    source = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "upstream"
+        / "trec2024-rag"
+        / "support_evaluation_individual_gpt4o.py"
+    )
     text = source.read_text(encoding="utf-8")
     expected = text.split('SUPPORT_EVAL_PROMPT = """', 1)[1].split('"""', 1)[0]
     assert SUPPORT_EVAL_PROMPT == expected

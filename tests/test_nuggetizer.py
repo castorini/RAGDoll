@@ -33,8 +33,7 @@ def _yaml_part(path: Path, key: str) -> str:
 
 
 def test_nugget_create_prompt_matches_source_template() -> None:
-    root = Path(__file__).resolve().parents[3]
-    source = root / "nuggetizer" / "src" / "nuggetizer" / "prompts" / "prompt_templates" / "creator_template.yaml"
+    source = Path(__file__).resolve().parent / "fixtures" / "upstream" / "nuggetizer" / "creator_template.yaml"
     expected_system = _yaml_part(source, "system_message")
     expected_user = _yaml_part(source, "prefix_user").format(
         query="q",
@@ -48,8 +47,7 @@ def test_nugget_create_prompt_matches_source_template() -> None:
 
 
 def test_nugget_score_prompt_matches_source_template() -> None:
-    root = Path(__file__).resolve().parents[3]
-    source = root / "nuggetizer" / "src" / "nuggetizer" / "prompts" / "prompt_templates" / "scorer_template.yaml"
+    source = Path(__file__).resolve().parent / "fixtures" / "upstream" / "nuggetizer" / "scorer_template.yaml"
     expected_system = _yaml_part(source, "system_message")
     expected_user = _yaml_part(source, "prefix_user").format(query="q", nuggets=["n"], num_nuggets=1)
     assert expected_system == NUGGET_SCORER_SYSTEM
@@ -57,8 +55,7 @@ def test_nugget_score_prompt_matches_source_template() -> None:
 
 
 def test_nugget_assign_3grade_prompt_matches_source_template() -> None:
-    root = Path(__file__).resolve().parents[3]
-    source = root / "nuggetizer" / "src" / "nuggetizer" / "prompts" / "prompt_templates" / "assigner_template.yaml"
+    source = Path(__file__).resolve().parent / "fixtures" / "upstream" / "nuggetizer" / "assigner_template.yaml"
     expected_system = _yaml_part(source, "system_message")
     expected_user = _yaml_part(source, "prefix_user").format(query="q", context="ctx", nuggets=["n"], num_nuggets=1)
     assert expected_system == NUGGET_ASSIGNER_SYSTEM
@@ -68,8 +65,7 @@ def test_nugget_assign_3grade_prompt_matches_source_template() -> None:
 
 
 def test_nugget_assign_2grade_prompt_matches_source_template() -> None:
-    root = Path(__file__).resolve().parents[3]
-    source = root / "nuggetizer" / "src" / "nuggetizer" / "prompts" / "prompt_templates" / "assigner_2grade_template.yaml"
+    source = Path(__file__).resolve().parent / "fixtures" / "upstream" / "nuggetizer" / "assigner_2grade_template.yaml"
     expected_system = _yaml_part(source, "system_message")
     expected_user = _yaml_part(source, "prefix_user").format(query="q", context="ctx", nuggets=["n"], num_nuggets=1)
     assert expected_system == NUGGET_ASSIGNER_SYSTEM
