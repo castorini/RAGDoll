@@ -5,7 +5,7 @@ import math
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: Iterable[dict[str, Any]]) -> None:
@@ -85,9 +85,9 @@ def system_counts(judgments: Iterable[dict[str, Any]]) -> dict[str, dict[str, in
     return counts
 
 
-def _valid_outcomes(judgments: Iterable[dict[str, Any]], run_ids: list[str]) -> list[tuple[int, int, float]]:
-    index = {run_id: i for i, run_id in enumerate(run_ids)}
-    outcomes: list[tuple[int, int, float]] = []
+def _arena_rank_rows(judgments: Iterable[dict[str, Any]], run_ids: list[str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    run_id_set = set(run_ids)
     for row in judgments:
         if row.get("status") != "completed":
             continue
@@ -95,18 +95,18 @@ def _valid_outcomes(judgments: Iterable[dict[str, Any]], run_ids: list[str]) -> 
         if not isinstance(pair, list) or len(pair) != 2:
             continue
         run_a, run_b = str(pair[0]), str(pair[1])
-        if run_a not in index or run_b not in index:
+        if run_a not in run_id_set or run_b not in run_id_set:
             continue
         if row.get("judge_verdict") == "Tie":
-            y = 0.5
+            winner = "tie"
         elif row.get("preferred_run_id") == run_a:
-            y = 1.0
+            winner = "model_a"
         elif row.get("preferred_run_id") == run_b:
-            y = 0.0
+            winner = "model_b"
         else:
             continue
-        outcomes.append((index[run_a], index[run_b], y))
-    return outcomes
+        rows.append({"model_a": run_a, "model_b": run_b, "winner": winner})
+    return rows
 
 
 def fit_arena_ratings(
@@ -116,56 +116,36 @@ def fit_arena_ratings(
     scale: float = 400.0,
     init_rating: float = 1000.0,
 ) -> dict[str, float]:
-    """Fit Arena-style Bradley-Terry ratings on an Elo-like scale."""
+    """Fit ratings with the lmarena/arena-rank Bradley-Terry backend."""
     if not run_ids:
         return {}
 
-    outcomes = _valid_outcomes(judgments, run_ids)
-    if len(run_ids) == 1 or not outcomes:
+    rows = _arena_rank_rows(judgments, run_ids)
+    if len(run_ids) == 1 or not rows:
         return dict(zip(run_ids, [init_rating for _ in run_ids], strict=True))
 
     try:
-        import numpy as np
-        from scipy.optimize import minimize
-        from scipy.special import expit
+        import pandas as pd
+        from arena_rank.models.bradley_terry import BradleyTerry
+        from arena_rank.utils.data_utils import PairDataset
     except ImportError as exc:
-        raise RuntimeError("Bradley-Terry ranking requires scipy; install project dependencies with `uv sync`.") from exc
+        raise RuntimeError("Arena ranking requires arena-rank; install project dependencies with `uv sync`.") from exc
 
-    n_systems = len(run_ids)
-    alpha = math.log(10.0)
-
-    def objective(ratings: Any) -> tuple[float, Any]:
-        ratings = np.asarray(ratings, dtype=float)
-        loss = 0.0
-        grad = np.zeros(n_systems, dtype=float)
-        for i, j, y in outcomes:
-            diff = ratings[i] - ratings[j]
-            logit = alpha * diff
-            p = float(expit(logit))
-            loss += float(np.logaddexp(0.0, logit)) - y * logit
-            delta = alpha * (p - y)
-            grad[i] += delta
-            grad[j] -= delta
-        return loss, grad
-
-    result = minimize(
-        lambda params: objective(params)[0],
-        np.zeros(n_systems, dtype=float),
-        jac=lambda params: objective(params)[1],
-        method="L-BFGS-B",
-        options={"gtol": 1e-8, "maxiter": 1000},
+    dataset = PairDataset.from_pandas(pd.DataFrame(rows), reweighted=False)
+    model = BradleyTerry(
+        n_competitors=len(dataset.competitors),
+        scale=scale,
+        init_rating=init_rating,
     )
-    if not result.success:
-        raise RuntimeError(f"Arena rating optimizer failed to converge: {result.message}")
-
-    raw_ratings = cast(Any, np.asarray(result.x, dtype=float))
-    raw_ratings = raw_ratings - float(np.mean(raw_ratings))
-    arena_scores = raw_ratings * scale + init_rating
-    return dict(zip(run_ids, [float(score) for score in arena_scores], strict=True))
-
-
-def fit_bradley_terry(judgments: Iterable[dict[str, Any]], run_ids: list[str]) -> dict[str, float]:
-    return fit_arena_ratings(judgments, run_ids)
+    result = model.compute_ratings_and_cis(dataset, ci_method="sandwich")
+    scores = dict(
+        zip(
+            result["competitors"],
+            [float(score) for score in result["ratings"]],
+            strict=True,
+        )
+    )
+    return {run_id: scores.get(run_id, init_rating) for run_id in run_ids}
 
 
 def leaderboard_rows(judgments: Iterable[dict[str, Any]], run_ids: list[str]) -> list[dict[str, Any]]:

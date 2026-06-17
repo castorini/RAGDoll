@@ -259,10 +259,13 @@ outcomes, while `leaderboard.csv` converts those outcomes into Arena ratings.
 Leaderboard rows contain `rank`, `run_id`, `arena_score`, `n_judgments`, `wins`,
 `losses`, and `ties`.
 
-Arena scores are fit with SciPy's optimizer over the Bradley-Terry/logistic
-paired-comparison likelihood, with wins as `1.0`, losses as `0.0`, and ties as
-`0.5`. Ratings are reported on an Elo-like Arena scale centered at `1000`, with
-`400` points corresponding to one base-10 log-odds unit.
+Arena scores are fit with the `arena-rank` package from LMArena
+(<https://github.com/lmarena/arena-rank>). Pi-TREC converts each valid
+judgment into the package's standard `model_a`, `model_b`, `winner` schema, with
+wins as `model_a`/`model_b` and ties as `tie`. `arena-rank` then fits the
+Bradley-Terry/logistic paired-comparison model and reports ratings on an
+Elo-like Arena scale centered at `1000`, with `400` points corresponding to one
+base-10 log-odds unit.
 
 Materialize exact judge prompts without running Pi:
 

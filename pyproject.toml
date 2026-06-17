@@ -5,8 +5,8 @@ description = "Private Pi/Codex runner for RAG evaluation prompts"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "arena-rank>=0.1.1",
     "pyyaml>=6",
-    "scipy>=1.11",
 ]
 
 [project.optional-dependencies]
