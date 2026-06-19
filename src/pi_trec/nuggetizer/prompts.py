@@ -1,9 +1,19 @@
 from __future__ import annotations
 
-NUGGET_CREATOR_SYSTEM = "You are NuggetizeLLM, an intelligent assistant that can update a list of atomic nuggets to best provide all the information required for the query."
+NUGGET_CREATOR_SYSTEM = "\
+You are NuggetizeLLM, an intelligent assistant that can update a list of \
+atomic nuggets to best provide all the information required for the query."
 
 
-NUGGET_CREATOR_USER = """Update the list of atomic nuggets of information (1-12 words), if needed, so they best provide the information required for the query. Leverage only the initial list of nuggets (if exists) and the provided context (this is an iterative process).  Return only the final list of all nuggets in a Pythonic list format (even if no updates). Make sure there is no redundant information. Ensure the updated nugget list has at most {creator_max_nuggets} nuggets (can be less), keeping only the most vital ones. Order them in decreasing order of importance. Prefer nuggets that provide more interesting information.
+NUGGET_CREATOR_USER = """\
+Update the list of atomic nuggets of information (1-12 words), \
+if needed, so they best provide the information required for the query. \
+Leverage only the initial list of nuggets (if exists) and the provided context \
+(this is an iterative process). Return only the final list of all nuggets in a \
+Pythonic list format (even if no updates). Make sure there is no redundant information. \
+Ensure the updated nugget list has at most {creator_max_nuggets} nuggets (can be less), \
+keeping only the most vital ones. Order them in decreasing order of importance. \
+Prefer nuggets that provide more interesting information.
 
 Search Query: {query}
 Context:
@@ -12,14 +22,23 @@ Search Query: {query}
 Initial Nugget List: {nuggets}
 Initial Nugget List Length: {nuggets_length}
 
-Only update the list of atomic nuggets (if needed, else return as is). Do not explain. Always answer in short nuggets (not questions). List in the form ["a", "b", ...] and a and b are strings with no mention of ".
+Only update the list of atomic nuggets (if needed, else return as is). \
+Do not explain. Always answer in short nuggets (not questions). \
+List in the form ["a", "b", ...] and a and b are strings with no mention of ".
 Updated Nugget List:"""
 
 
-NUGGET_SCORER_SYSTEM = "You are NuggetizeScoreLLM, an intelligent assistant that can label a list of atomic nuggets based on their importance for a given search query."
+NUGGET_SCORER_SYSTEM = "\
+You are NuggetizeScoreLLM, an intelligent assistant that can label a \
+list of atomic nuggets based on their importance for a given search query."
 
 
-NUGGET_SCORER_USER = """Based on the query, label each of the {num_nuggets} nuggets either a vital or okay based on the following criteria. Vital nuggets represent concepts that must be present in a "good" answer; on the other hand, okay nuggets contribute worthwhile information about the target but are not essential. Return the list of labels in a Pythonic list format (type: List[str]). The list should be in the same order as the input nuggets. Make sure to provide a label for each nugget.
+NUGGET_SCORER_USER = """\
+Based on the query, label each of the {num_nuggets} nuggets either a vital or okay based on the following criteria. \
+Vital nuggets represent concepts that must be present in a "good" answer; on the other hand, okay nuggets contribute \
+worthwhile information about the target but are not essential. Return the list of labels in a Pythonic list format \
+(type: List[str]). The list should be in the same order as the input nuggets. \
+Make sure to provide a label for each nugget.
 
 Search Query: {query}
 Nugget List: {nuggets}
@@ -28,7 +47,9 @@ Only return the list of labels (List[str]). Do not explain.
 Labels:"""
 
 
-PI_SEARCH_SYSTEM_PROMPT = """You are a retrieval agent operating inside Pi for evidence-grounded mining tasks. Use only the available retrieval tools and the user's task instructions.
+PI_SEARCH_SYSTEM_PROMPT = """\
+You are a retrieval agent operating inside Pi for evidence-grounded mining tasks. \
+Use only the available retrieval tools and the user's task instructions.
 
 Available tools:
 - search: Always supply reason first, under 100 words. Use query for a concise raw search string based on the original wording or one grounded refinement. The tool returns a search_id plus the first page of results.
@@ -46,20 +67,41 @@ Guidelines:
 NUGGET_AGENTIC_CREATOR_SYSTEM = NUGGET_CREATOR_SYSTEM + "\n\n" + PI_SEARCH_SYSTEM_PROMPT
 
 
-NUGGET_AGENTIC_CREATOR_USER = """Update the list of atomic nuggets of information (1-12 words), if needed, so they best provide all the information required for the query. Leverage only the initial list of nuggets (if exists) and evidence you retrieve with the available search and read_document tools. Return only the final list of all nuggets in a Pythonic list format (even if no updates). Make sure there is no redundant information. Ensure the updated nugget list has at most {creator_max_nuggets} nuggets (can be less), keeping only the most vital ones. Order them in decreasing order of importance. Prefer nuggets that provide more interesting information.
+NUGGET_AGENTIC_CREATOR_USER = """\
+Update the list of atomic nuggets of information (1-12 words), if needed, \
+so they best provide all the information required for the query. \
+Leverage only the initial list of nuggets (if exists) and evidence \
+you retrieve with the available search and read_document tools. \
+Return only the final list of all nuggets in a Pythonic list format \
+(even if no updates). Make sure there is no redundant information. \
+Ensure the updated nugget list has at most {creator_max_nuggets} nuggets (can be less), \
+keeping only the most vital ones. Order them in decreasing order of importance. \
+Prefer nuggets that provide more interesting information.
 
 Search Query: {query}
 Initial Nugget List: {nuggets}
 Initial Nugget List Length: {nuggets_length}
 
-Search the corpus for evidence relevant to the search query, read the most useful documents, and iteratively update the initial nugget list as you gather evidence. Only use retrieved evidence and the initial nugget list. Do not explain. Always answer in short nuggets (not questions). List in the form ["a", "b", ...] and a and b are strings with no mention of ".
+Search the corpus for evidence relevant to the search query, read the most useful documents, \
+and iteratively update the initial nugget list as you gather evidence. Only use retrieved evidence \
+and the initial nugget list. Do not explain. Always answer in short nuggets (not questions). \
+List in the form ["a", "b", ...] and a and b are strings with no mention of ".
 Updated Nugget List:"""
 
 
-NUGGET_ASSIGNER_SYSTEM = "You are NuggetizeAssignerLLM, an intelligent assistant that can label a list of atomic nuggets based on if they are captured by a given passage."
+NUGGET_ASSIGNER_SYSTEM = "\
+You are NuggetizeAssignerLLM, an intelligent assistant that can label a list of \
+atomic nuggets based on if they are captured by a given passage."
 
 
-NUGGET_ASSIGNER_USER = """Based on the query and passage, label each of the {num_nuggets} nuggets either as support, partial_support, or not_support using the following criteria. A nugget that is fully captured in the passage should be labeled as support. A nugget that is partially captured in the passage should be labeled as partial_support. If the nugget is not captured at all, label it as not_support. Return the list of labels in a Pythonic list format (type: List[str]). The list should be in the same order as the input nuggets. Make sure to provide a label for each nugget.
+NUGGET_ASSIGNER_USER = """\
+Based on the query and passage, label each of the {num_nuggets} nuggets either as \
+support, partial_support, or not_support using the following criteria. \
+A nugget that is fully captured in the passage should be labeled as support. \
+A nugget that is partially captured in the passage should be labeled as partial_support. \
+If the nugget is not captured at all, label it as not_support. Return the list of labels in a \
+Pythonic list format (type: List[str]). The list should be in the same order as the input nuggets. \
+Make sure to provide a label for each nugget.
 
 Search Query: {query}
 Passage: {context}
@@ -68,7 +110,12 @@ Only return the list of labels (List[str]). Do not explain.
 Labels:"""
 
 
-NUGGET_ASSIGNER_2GRADE_USER = """Based on the query and passage, label each of the {num_nuggets} nuggets either as support or not_support using the following criteria. A nugget that is fully captured in the passage should be labeled as support; otherwise, label them as not_support. Return the list of labels in a Pythonic list format (type: List[str]). The list should be in the same order as the input nuggets. Make sure to provide a label for each nugget.
+NUGGET_ASSIGNER_2GRADE_USER = """\
+Based on the query and passage, label each of the {num_nuggets} nuggets either as \
+support or not_support using the following criteria. A nugget that is fully captured in the passage \
+should be labeled as support; otherwise, label them as not_support. Return the list of labels in a \
+Pythonic list format (type: List[str]). The list should be in the same order as the input nuggets. \
+Make sure to provide a label for each nugget.
 
 Search Query: {query}
 Passage: {context}
