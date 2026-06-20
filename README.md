@@ -210,6 +210,65 @@ uv run pi-trec cost --raw-events-dir results/metrics/../raw-events \
   --input-price 0.25 --output-price 2.0    # USD per 1M tokens (optional)
 ```
 
+## Rubric (Nuggets → Rubrics)
+
+A ResearchRubrics-style evaluation path that reuses nugget **extraction** but replaces nugget **assignment**: turn a topic's scored nuggets into a weighted, reference-independent rubric, grade each criterion with a ternary verdict against the *full* answer, and score it with the normalized weighted formula
+
+```
+S_k = Σ_i (w_i · m_i) / Σ_{i: w_i > 0} w_i      m ∈ {satisfied=1, partially_satisfied=0.5, not_satisfied=0}   (binary collapses partial → 0)
+```
+
+Four stages — `author`, `grade`, `score`, and an `eval` orchestrator that chains them. Authoring runs once per topic, independent of any answer; weights are assigned deterministically from each nugget's importance (vital → mandatory `+5`, okay → optional `+2`).
+
+Author a weighted rubric from a nuggets file (`query`, `qid`, `nuggets` with `importance`):
+
+```bash
+uv run pi-trec rubric author \
+  --input-file path/to/nuggets.jsonl \
+  --output-file results/rubric.jsonl \
+  --model openai-codex/gpt-5.4-mini --thinking minimal
+```
+
+Grade answers against the rubric. `grade` consumes the answers×rubric join `eval` writes as `grade_inputs.jsonl` (criteria are windowed; the whole answer is always shown), or a single inline payload via `--input-json`:
+
+```bash
+uv run pi-trec rubric grade \
+  --input-file results/grade_inputs.jsonl \
+  --output-file results/graded.jsonl \
+  --window-size 10 --model openai-codex/gpt-5.4-mini --thinking minimal
+```
+
+Score a graded file into ternary + binary `S_k` with per-cell and per-run CSVs; `--reference` (a gold/reference *graded* file) adds the Kendall `tau` between the two graded runs:
+
+```bash
+uv run pi-trec rubric score \
+  --input-file results/graded.jsonl \
+  --output-dir results/scores
+```
+
+### End-to-end eval
+
+`rubric eval` chains author → grade → score in one run. Give it either `--nuggets-file` (assignment-only, fixed nuggets), `--create-input` (generate nuggets first, E2E), or a pre-authored `--rubric-file`, plus `--answers-file` and `--output-dir`. It writes `rubric.jsonl`, `grade_inputs.jsonl`, `graded.jsonl`, and a `scores/` dir (`cell_scores.csv`, `run_scores.csv`, `category_failures.csv`, `correlations.csv`).
+
+```bash
+# Assignment (fixed nugget pool):
+uv run pi-trec rubric eval \
+  --nuggets-file path/to/nuggets.jsonl \
+  --answers-file path/to/answers.jsonl \
+  --output-dir results/rubric/assignment \
+  --model openai-codex/gpt-5.4-mini --thinking minimal \
+  --window-size 10 --max-concurrency 16
+
+# End-to-end (create → author → grade → score):
+uv run pi-trec rubric eval \
+  --create-input path/to/create_input.jsonl \
+  --answers-file path/to/answers.jsonl \
+  --output-dir results/rubric/e2e \
+  --model openai-codex/gpt-5.4-mini --thinking minimal --max-nuggets 30
+```
+
+To align the rubric run-ranking with the human nugget-coverage ranking, build human coverage with `pi-trec nuggetizer metrics` (Kendall `tau` vs the human assignment) and correlate it against `scores/run_scores.csv` / `scores/cell_scores.csv`.
+
 ## Support Evaluation
 
 Run support judgment on pre-resolved statement/citation pairs:
