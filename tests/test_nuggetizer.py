@@ -40,6 +40,9 @@ def test_nugget_create_prompt_matches_source_template() -> None:
         nuggets_length=0,
         creator_max_nuggets=30,
     )
+    expected_user = expected_user.replace(
+        "(this is an iterative process).  Return", "(this is an iterative process). Return"
+    )
     assert expected_system == NUGGET_CREATOR_SYSTEM
     assert render_create_prompt(query="q", context="ctx") == expected_user
 

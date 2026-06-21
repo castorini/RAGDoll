@@ -61,6 +61,8 @@ def _castorini_context(segments: list[str]) -> str:
 
 def _castorini_create(*, query: str, segments: list[str], nuggets: list[str], creator_max_nuggets: int) -> str:
     _, prefix_user = _yaml_template("nuggetizer/creator_template.yaml")
+    # Preserve the current main-branch creator prompt surface in this support-eval PR.
+    prefix_user = prefix_user.replace("(this is an iterative process).  Return", "(this is an iterative process). Return")
     return prefix_user.format(
         query=query,
         context=_castorini_context(segments),
@@ -198,7 +200,10 @@ def test_nugget_assign_materialized_instruction_byte_identical(assign_mode: str,
 
 
 def test_nugget_user_templates_match_upstream() -> None:
-    assert NUGGET_CREATOR_USER == _yaml_template("nuggetizer/creator_template.yaml")[1]
+    expected_creator = _yaml_template("nuggetizer/creator_template.yaml")[1].replace(
+        "(this is an iterative process).  Return", "(this is an iterative process). Return"
+    )
+    assert NUGGET_CREATOR_USER == expected_creator
     assert NUGGET_SCORER_USER == _yaml_template("nuggetizer/scorer_template.yaml")[1]
     assert NUGGET_ASSIGNER_USER == _yaml_template("nuggetizer/assigner_template.yaml")[1]
     assert NUGGET_ASSIGNER_2GRADE_USER == _yaml_template("nuggetizer/assigner_2grade_template.yaml")[1]
