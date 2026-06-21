@@ -309,6 +309,7 @@ async def _generate_labels(
             raw_events_dir=raw_events_dir,
             config=replace(config, system_prompt=system_prompt),
             metadata=metadata,
+            bust_cache=trial > 0,
         )
         last = result
         if result["status"] == "completed":

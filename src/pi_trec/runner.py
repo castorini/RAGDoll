@@ -271,6 +271,7 @@ async def run_prompt(
     raw_events_dir: Path,
     config: LocalAgentConfig,
     metadata: dict[str, Any] | None = None,
+    bust_cache: bool = False,
 ) -> dict[str, Any]:
     start = time.time()
     raw_events_dir.mkdir(parents=True, exist_ok=True)
@@ -278,7 +279,9 @@ async def run_prompt(
     agent_state_dir = config.agent_state_dir or default_agent_state_dir()
 
     cache_path = (config.cache_dir / f"{cache_key(config, instruction)}.json") if config.cache_dir else None
-    if cache_path is not None:
+    # Retries pass bust_cache to skip the read so a parse-miss samples afresh;
+    # the unconditional write below then heals the stale entry for next time.
+    if cache_path is not None and not bust_cache:
         cached = read_cache(cache_path, now=start)
         if cached is not None:
             cached.pop("cached_at", None)
