@@ -12,18 +12,18 @@ from pathlib import Path
 
 from pi_trec import (
     arena,
-    cost as cost_mod,
-)
-from pi_trec import (
-    doctor as doctor_mod,
-)
-from pi_trec import (
     nuggetizer,
     pyserini_wrapper,
     rubric,
     support,
     trec_io,
     umbrela,
+)
+from pi_trec import (
+    cost as cost_mod,
+)
+from pi_trec import (
+    doctor as doctor_mod,
 )
 from pi_trec import (
     validate as validate_mod,
@@ -34,8 +34,8 @@ from pi_trec.config import (
     CostConfig,
     DoctorConfig,
     LocalAgentRunConfig,
-    MaterializeAssignInputsConfig,
     MaterializeArenaConfig,
+    MaterializeAssignInputsConfig,
     MaterializeNuggetAgenticCreateConfig,
     MaterializeNuggetAssignConfig,
     MaterializeNuggetCreateConfig,
