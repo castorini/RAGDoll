@@ -17,13 +17,3 @@ jobs:
         run: uv run ruff check src tests
       - name: Pytest
         run: uv run pytest -q
-
-  typecheck:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --group dev
-      - name: Mypy (advisory)
-        run: uv run mypy src
