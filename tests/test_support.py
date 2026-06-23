@@ -13,7 +13,6 @@ from pi_trec.support import (
     render_support_prompt,
 )
 
-
 UPSTREAM = Path(__file__).resolve().parent / "fixtures" / "upstream"
 SUPPORT_PROMPT_FIXTURE = UPSTREAM / "trec2024-rag" / "support_evaluation_codex_gpt5_5.yaml"
 
