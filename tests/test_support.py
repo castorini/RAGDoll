@@ -2,6 +2,8 @@ import asyncio
 import json
 from pathlib import Path
 
+import yaml
+
 from pi_trec.config import SupportJudgeConfig
 from pi_trec.support import (
     SUPPORT_EVAL_PROMPT,
@@ -10,6 +12,9 @@ from pi_trec.support import (
     parse_support_label,
     render_support_prompt,
 )
+
+UPSTREAM = Path(__file__).resolve().parent / "fixtures" / "upstream"
+SUPPORT_PROMPT_FIXTURE = UPSTREAM / "trec2024-rag" / "support_evaluation_codex_gpt5_5.yaml"
 
 
 def _fake_agent(tmp_path: Path, output_text: str) -> Path:
@@ -20,24 +25,38 @@ def _fake_agent(tmp_path: Path, output_text: str) -> Path:
     return agent
 
 
-def test_support_prompt_matches_source_script() -> None:
-    source = (
-        Path(__file__).resolve().parent
-        / "fixtures"
-        / "upstream"
-        / "trec2024-rag"
-        / "support_evaluation_individual_gpt4o.py"
-    )
-    text = source.read_text(encoding="utf-8")
-    expected = text.split('SUPPORT_EVAL_PROMPT = """', 1)[1].split('"""', 1)[0]
-    assert SUPPORT_EVAL_PROMPT == expected
-    assert render_support_prompt(statement="s", citation="c") == expected.format(statement="s", citation="c")
+def test_support_prompt_matches_fixture() -> None:
+    assert SUPPORT_EVAL_PROMPT == yaml.safe_load(SUPPORT_PROMPT_FIXTURE.read_text(encoding="utf-8"))["prefix_user"]
+
+
+def test_support_prompt_includes_sentence_context() -> None:
+    prompt = render_support_prompt(statement="s", citation="c", sentence_context="before **s** after")
+    assert "Cited Passage: c" in prompt
+    assert "Sentence: s" in prompt
+    assert "Sentence Context: before **s** after" in prompt
 
 
 def test_support_tasks_accept_direct_rows() -> None:
     tasks = iter_support_tasks([{"task_id": "t", "statement": "s", "citation": "c"}])
     assert tasks[0]["task_id"] == "t"
-    assert "Statement: s" in tasks[0]["instruction"]
+    assert "Sentence: s" in tasks[0]["instruction"]
+    assert "Sentence Context: **s**" in tasks[0]["instruction"]
+
+
+def test_support_tasks_accept_direct_rows_with_sentence_context() -> None:
+    tasks = iter_support_tasks(
+        [
+            {
+                "task_id": "t",
+                "statement": "It helps.",
+                "citation": "The source says peer support helps.",
+                "sentence_context": "The response discusses peer support. It helps.",
+            }
+        ]
+    )
+    expected = "The response discusses peer support. **It helps.**"
+    assert f"Sentence Context: {expected}" in tasks[0]["instruction"]
+    assert tasks[0]["metadata"]["sentence_context"] == expected
 
 
 def test_support_tasks_accept_resolved_trec_answer_rows() -> None:
@@ -54,6 +73,28 @@ def test_support_tasks_accept_resolved_trec_answer_rows() -> None:
     )
     assert tasks[0]["task_id"] == "r1:q1:s0:c0"
     assert tasks[0]["metadata"]["citation"] == "citation text"
+    assert tasks[0]["metadata"]["sentence_context"] == "**statement**"
+
+
+def test_support_tasks_build_full_answer_context() -> None:
+    tasks = iter_support_tasks(
+        [
+            {
+                "topic_id": "q1",
+                "run_id": "r1",
+                "references": ["d1"],
+                "segments": {"d1": "citation text"},
+                "answer": [
+                    {"text": "First sentence.", "citations": []},
+                    {"text": "Second sentence.", "citations": [0]},
+                    {"text": "Third sentence.", "citations": []},
+                ],
+            }
+        ]
+    )
+    expected = "First sentence. **Second sentence.** Third sentence."
+    assert tasks[0]["metadata"]["sentence_context"] == expected
+    assert f"Sentence Context: {expected}" in tasks[0]["instruction"]
 
 
 def test_parse_support_label() -> None:
@@ -95,4 +136,3 @@ def test_support_judge_resume_skips_completed(tmp_path: Path) -> None:
     assert grouped["a"] == [{"task_id": "a", "status": "completed", "statement": "s1", "citation": "c1", "support_label": "NS"}]
     assert len(grouped["b"]) == 1
     assert grouped["b"][0]["support_label"] == "FS"
-
