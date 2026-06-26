@@ -1539,6 +1539,7 @@ source = { editable = "." }
 dependencies = [
     { name = "arena-rank" },
     { name = "pyyaml" },
+    { name = "scipy" },
 ]
 
 [package.optional-dependencies]
@@ -1559,6 +1560,7 @@ requires-dist = [
     { name = "arena-rank", specifier = ">=0.1.1" },
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.7" },
     { name = "pyyaml", specifier = ">=6" },
+    { name = "scipy", specifier = ">=1.10" },
 ]
 provides-extras = ["viz"]
 
