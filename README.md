@@ -89,19 +89,145 @@ uv run pi-trec materialize nugget-agentic-create \
 
 ## Support Assessment
 
-Run support judgment on pre-resolved statement/citation pairs. Direct rows may
-include `sentence_context`, the full generated response containing the judged
-sentence. If it is omitted, Pi-TREC renders the judged sentence as the full
-context. For TREC answer rows, Pi-TREC builds the context from the full
-`answer` list and bolds the target sentence.
+Support assessment starts from answer rows with resolved cited passage text.
+Each input row is one `(topic_id, run_id)` answer. The `answer` field contains
+sentence text and citation references; `references` maps numeric citation
+indices to document IDs; `segments` maps document IDs to the cited passage text
+that the support judge will read.
+
+```json
+{
+  "topic_id": "14",
+  "run_id": "example-run",
+  "references": ["doc-a"],
+  "segments": {
+    "doc-a": "Full cited passage text."
+  },
+  "answer": [
+    {
+      "text": "Answer sentence.",
+      "citations": [0]
+    }
+  ]
+}
+```
+
+Run support judgment on the answer file:
 
 ```bash
 uv run pi-trec support judge \
-  --input-file examples/support.requests.jsonl \
-  --output-file results/support.jsonl \
+  --input-file answers.jsonl \
+  --output-file judgments.parsed.jsonl \
   --raw-events-dir results/support.raw-events \
   --overwrite
 ```
+
+This writes one row per judged sentence/citation pair:
+
+```json
+{
+  "task_id": "example-run:14:s0:c0",
+  "statement": "Answer sentence.",
+  "citation": "Full cited passage text.",
+  "support_label": "FS",
+  "raw_output": "Full Support",
+  "status": "completed",
+  "metadata": {
+    "topic_id": "14",
+    "run_id": "example-run",
+    "sentence_index": 0,
+    "citation_index": 0,
+    "docid": "doc-a"
+  }
+}
+```
+
+Assemble the parsed judgments back onto the original answer structure:
+
+```bash
+uv run pi-trec support assemble \
+  --answers-file answers.jsonl \
+  --judgments judgments.parsed.jsonl \
+  --output-file support_assignments.jsonl
+```
+
+The assignment file is one row per `(topic_id, run_id)`:
+
+```json
+{
+  "topic_id": "14",
+  "narrative_id": "14",
+  "run_id": "example-run",
+  "sentences": [
+    {
+      "sentenceID": 0,
+      "text": "Answer sentence.",
+      "citations": [
+        {
+          "citationID": 0,
+          "reference": "doc-a",
+          "support": "2"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Support values are `2` = full support, `1` = partial support, `0` = no support,
+and `-1` = missing, failed, or unparseable.
+
+Compute run/topic support metrics:
+
+```bash
+uv run pi-trec support metrics \
+  --input-file support_assignments.jsonl \
+  --output-file support_metrics.jsonl
+```
+
+This writes one score row per `(topic_id, run_id)`:
+
+```json
+{
+  "topic_id": "14",
+  "run_id": "example-run",
+  "weighted_precision_first_citation": 1.0,
+  "weighted_recall_first_citation": 1.0,
+  "weighted_precision_all_judged_citations": 1.0,
+  "weighted_recall_all_judged_citations": 1.0,
+  "hard_precision": 1.0,
+  "hard_recall": 1.0,
+  "sentences": 1
+}
+```
+
+Optionally export metric rows:
+
+```bash
+uv run pi-trec support metric-rows \
+  --input-file support_metrics.jsonl \
+  --output-file support_metric_rows.txt
+```
+
+```text
+example-run 14 weighted_precision_first_citation 1
+example-run 14 weighted_recall_first_citation 1
+example-run 14 weighted_precision_all_judged_citations 1
+example-run 14 weighted_recall_all_judged_citations 1
+```
+
+For many answer files, `support summarize` combines assignment assembly,
+metric computation, and metric-row export after judgments already exist:
+
+```bash
+uv run pi-trec support summarize \
+  --answers-dir answers/ \
+  --judgments-root judgments/ \
+  --output-dir support_scores/
+```
+
+It writes `support_assignments.jsonl`, `support_metrics.jsonl`, and
+`support_metric_rows.txt` under the output directory.
 
 The support prompt follows the TREC RAG Task assessor-facing support
 instructions, using `Cited Passage`, `Sentence`, and `Sentence Context` fields.
