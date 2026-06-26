@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 from pi_trec.cli import main
+from pi_trec.support import resolve as resolve_mod
 
 
 def test_materialize_umbrela_cli(tmp_path: Path, monkeypatch) -> None:
@@ -93,6 +94,84 @@ def test_support_metrics_cli(tmp_path: Path, monkeypatch) -> None:
     assert row["weighted_recall_first_citation"] == 1.0
     assert row["weighted_precision_all_judged_citations"] == 1.0
     assert row["weighted_recall_all_judged_citations"] == 1.0
+
+
+def test_support_resolve_references_cli(tmp_path: Path, monkeypatch) -> None:
+    input_path = tmp_path / "answers.jsonl"
+    output_path = tmp_path / "resolved.jsonl"
+    input_path.write_text(
+        '{"metadata":{"run_id":"r1","narrative_id":"14"},"references":["doc-a"],"answer":[{"text":"s","citations":[0]}]}\n',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        resolve_mod,
+        "read_pyserini_document",
+        lambda config, request_body: {"found": True, "docid": request_body["docid"], "text": "Resolved passage."},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pi-trec",
+            "support",
+            "resolve-references",
+            "--input-file",
+            str(input_path),
+            "--output-file",
+            str(output_path),
+            "--pyserini-api",
+            "http://pyserini",
+            "--pyserini-index",
+            "climbmix",
+        ],
+    )
+    main()
+    row = json.loads(output_path.read_text(encoding="utf-8"))
+    assert row["segments"] == {"doc-a": "Resolved passage."}
+
+
+def test_support_resolve_references_prebuilt_cli(tmp_path: Path, monkeypatch) -> None:
+    input_path = tmp_path / "answers.jsonl"
+    output_path = tmp_path / "resolved.jsonl"
+    input_path.write_text(
+        '{"metadata":{"run_id":"r1","narrative_id":"14"},"references":["doc-a"],"answer":[{"text":"s","citations":[0]}]}\n',
+        encoding="utf-8",
+    )
+
+    class FakeDoc:
+        def raw(self) -> str:
+            return json.dumps({"contents": "Prebuilt passage."})
+
+    class FakeSearcher:
+        @classmethod
+        def from_prebuilt_index(cls, index: str):
+            assert index == "prebuilt-name"
+            return cls()
+
+        def doc(self, docid: str):
+            assert docid == "doc-a"
+            return FakeDoc()
+
+    monkeypatch.setattr(resolve_mod, "_lucene_searcher_cls", lambda: FakeSearcher)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pi-trec",
+            "support",
+            "resolve-references",
+            "--input-file",
+            str(input_path),
+            "--output-file",
+            str(output_path),
+            "--pyserini-index",
+            "prebuilt-name",
+        ],
+    )
+    main()
+    row = json.loads(output_path.read_text(encoding="utf-8"))
+    assert row["segments"] == {"doc-a": "Prebuilt passage."}
 
 
 def test_support_metric_rows_cli(tmp_path: Path, monkeypatch) -> None:

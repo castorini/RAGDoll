@@ -9,6 +9,7 @@ from pi_trec.config import (
     SupportJudgeConfig,
     SupportMetricRowsConfig,
     SupportMetricsConfig,
+    SupportResolveReferencesConfig,
     SupportSummarizeConfig,
 )
 from pi_trec.support import (
@@ -21,10 +22,12 @@ from pi_trec.support import (
     metric_lines,
     parse_support_label,
     render_support_prompt,
+    resolve_references,
     summarize,
     support_metric,
     write_metric_rows,
 )
+from pi_trec.support import resolve as resolve_mod
 
 UPSTREAM = Path(__file__).resolve().parent / "fixtures" / "upstream"
 SUPPORT_PROMPT_FIXTURE = UPSTREAM / "trec2024-rag" / "support_evaluation_codex_gpt5_5.yaml"
@@ -87,6 +90,20 @@ def test_support_tasks_accept_resolved_trec_answer_rows() -> None:
     assert tasks[0]["task_id"] == "r1:q1:s0:c0"
     assert tasks[0]["metadata"]["citation"] == "citation text"
     assert tasks[0]["metadata"]["sentence_context"] == "**statement**"
+
+
+def test_support_tasks_accept_official_metadata_with_segments() -> None:
+    tasks = iter_support_tasks(
+        [
+            {
+                "metadata": {"narrative_id": "14", "run_id": "r1"},
+                "references": ["d1"],
+                "segments": {"d1": "citation text"},
+                "answer": [{"text": "statement", "citations": [0]}],
+            }
+        ]
+    )
+    assert tasks[0]["task_id"] == "r1:14:s0:c0"
 
 
 def test_support_tasks_build_full_answer_context() -> None:
@@ -240,6 +257,148 @@ def test_write_metric_rows(tmp_path: Path) -> None:
     write_metric_rows(SupportMetricRowsConfig(input_file=input_path, output_file=output_path, metrics=["hard_precision"]))
 
     assert output_path.read_text(encoding="utf-8") == "r1 14 hard_precision 0\n"
+
+
+def test_resolve_references_with_pyserini_http(tmp_path: Path, monkeypatch) -> None:
+    input_path = tmp_path / "answers.jsonl"
+    output_path = tmp_path / "resolved.jsonl"
+    input_path.write_text(
+        json.dumps(
+            {
+                "metadata": {"team_id": "team", "run_id": "r1", "narrative_id": "14"},
+                "references": ["doc-a"],
+                "answer": [{"text": "Answer sentence.", "citations": [0]}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def fake_read(config, request_body):
+        assert config.pyserini_base_url == "http://pyserini"
+        assert config.pyserini_index == "climbmix"
+        assert request_body["docid"] == "doc-a"
+        return {"found": True, "docid": "doc-a", "text": "Resolved passage."}
+
+    monkeypatch.setattr(resolve_mod, "read_pyserini_document", fake_read)
+
+    resolve_references(
+        SupportResolveReferencesConfig(
+            input_file=input_path,
+            output_file=output_path,
+            pyserini_api="http://pyserini",
+            pyserini_index="climbmix",
+        )
+    )
+
+    row = json.loads(output_path.read_text(encoding="utf-8"))
+    assert row["topic_id"] == "14"
+    assert row["run_id"] == "r1"
+    assert row["segments"] == {"doc-a": "Resolved passage."}
+
+
+def test_resolve_references_with_local_pyserini_index(tmp_path: Path, monkeypatch) -> None:
+    input_path = tmp_path / "answers.jsonl"
+    output_path = tmp_path / "resolved.jsonl"
+    input_path.write_text(
+        json.dumps(
+            {
+                "metadata": {"run_id": "r1", "narrative_id": "14"},
+                "references": ["doc-a"],
+                "answer": [{"text": "Answer sentence.", "citations": [0]}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    class FakeDoc:
+        def raw(self) -> str:
+            return json.dumps({"title": "Doc title", "segment": "Segment text."})
+
+    class FakeSearcher:
+        def doc(self, docid: str):
+            assert docid == "doc-a"
+            return FakeDoc()
+
+    monkeypatch.setattr(resolve_mod, "_lucene_searcher", lambda index: FakeSearcher())
+
+    resolve_references(
+        SupportResolveReferencesConfig(
+            input_file=input_path,
+            output_file=output_path,
+            pyserini_index=str(tmp_path / "index"),
+        )
+    )
+
+    row = json.loads(output_path.read_text(encoding="utf-8"))
+    assert row["segments"] == {"doc-a": "Doc title: Segment text."}
+
+
+def test_resolve_references_with_pyserini_prebuilt_index(tmp_path: Path, monkeypatch) -> None:
+    input_path = tmp_path / "answers.jsonl"
+    output_path = tmp_path / "resolved.jsonl"
+    input_path.write_text(
+        json.dumps(
+            {
+                "metadata": {"run_id": "r1", "narrative_id": "14"},
+                "references": ["doc-a"],
+                "answer": [{"text": "Answer sentence.", "citations": [0]}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    class FakeDoc:
+        def raw(self) -> str:
+            return json.dumps({"contents": "Prebuilt passage."})
+
+    class FakeSearcher:
+        @classmethod
+        def from_prebuilt_index(cls, index: str):
+            assert index == "msmarco-v2.1-doc-segmented"
+            return cls()
+
+        def doc(self, docid: str):
+            assert docid == "doc-a"
+            return FakeDoc()
+
+    monkeypatch.setattr(resolve_mod, "_lucene_searcher_cls", lambda: FakeSearcher)
+
+    resolve_references(
+        SupportResolveReferencesConfig(
+            input_file=input_path,
+            output_file=output_path,
+            pyserini_index="msmarco-v2.1-doc-segmented",
+        )
+    )
+
+    row = json.loads(output_path.read_text(encoding="utf-8"))
+    assert row["segments"] == {"doc-a": "Prebuilt passage."}
+
+
+def test_resolve_references_rejects_invalid_citation_index(tmp_path: Path) -> None:
+    input_path = tmp_path / "answers.jsonl"
+    output_path = tmp_path / "resolved.jsonl"
+    input_path.write_text(
+        '{"metadata":{"run_id":"r1","narrative_id":"14"},"references":["doc-a"],"answer":[{"text":"s","citations":[2]}]}\n',
+        encoding="utf-8",
+    )
+
+    try:
+        resolve_references(
+            SupportResolveReferencesConfig(
+                input_file=input_path,
+                output_file=output_path,
+                pyserini_api="http://pyserini",
+                pyserini_index="climbmix",
+            )
+        )
+    except ValueError as exc:
+        assert "outside references" in str(exc)
+    else:
+        raise AssertionError("expected invalid citation index to fail")
 
 
 def test_assemble_support_assignments_preserves_answer_shape(tmp_path: Path) -> None:

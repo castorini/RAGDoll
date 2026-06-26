@@ -89,11 +89,54 @@ uv run pi-trec materialize nugget-agentic-create \
 
 ## Support Assessment
 
-Support assessment starts from answer rows with resolved cited passage text.
-Each input row is one `(topic_id, run_id)` answer. The `answer` field contains
-sentence text and citation references; `references` maps numeric citation
-indices to document IDs; `segments` maps document IDs to the cited passage text
-that the support judge will read.
+Support assessment starts from official TREC RAG answer rows. Each JSONL row is
+one `(narrative_id, run_id)` answer. The `answer` field contains sentence text
+and zero-indexed citation references; `references` maps those citation indices
+to document IDs.
+
+```json
+{
+  "metadata": {
+    "team_id": "example-team",
+    "run_id": "example-run",
+    "type": "automatic",
+    "narrative_id": "14",
+    "title": "Example topic",
+    "narrative": "Example topic narrative."
+  },
+  "references": ["doc-a"],
+  "answer": [
+    {
+      "text": "Answer sentence.",
+      "citations": [0]
+    }
+  ]
+}
+```
+
+First resolve the cited document IDs to passage text. With a Pyserini HTTP API:
+
+```bash
+uv run pi-trec support resolve-references \
+  --input-file answers.jsonl \
+  --output-file answers.resolved.jsonl \
+  --pyserini-api http://127.0.0.1:8081 \
+  --pyserini-index climbmix-400b
+```
+
+Or directly with a Pyserini index. The index can be a local Lucene index path
+or a Pyserini prebuilt index name:
+
+```bash
+uv run pi-trec support resolve-references \
+  --input-file answers.jsonl \
+  --output-file answers.resolved.jsonl \
+  --pyserini-index msmarco-v2.1-doc-segmented
+```
+
+The resolved file preserves the original row and adds `topic_id`, `run_id`, and
+`segments`, where `segments` maps each reference document ID to the text that
+the support judge will read.
 
 ```json
 {
@@ -112,11 +155,11 @@ that the support judge will read.
 }
 ```
 
-Run support judgment on the answer file:
+Run support judgment on the resolved answer file:
 
 ```bash
 uv run pi-trec support judge \
-  --input-file answers.jsonl \
+  --input-file answers.resolved.jsonl \
   --output-file judgments.parsed.jsonl \
   --raw-events-dir results/support.raw-events \
   --overwrite
@@ -146,7 +189,7 @@ Assemble the parsed judgments back onto the original answer structure:
 
 ```bash
 uv run pi-trec support assemble \
-  --answers-file answers.jsonl \
+  --answers-file answers.resolved.jsonl \
   --judgments judgments.parsed.jsonl \
   --output-file support_assignments.jsonl
 ```
@@ -216,8 +259,9 @@ example-run 14 weighted_precision_all_judged_citations 1
 example-run 14 weighted_recall_all_judged_citations 1
 ```
 
-For many answer files, `support summarize` combines assignment assembly,
-metric computation, and metric-row export after judgments already exist:
+For many resolved answer files, `support summarize` combines assignment
+assembly, metric computation, and metric-row export after judgments already
+exist:
 
 ```bash
 uv run pi-trec support summarize \

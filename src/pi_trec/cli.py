@@ -57,6 +57,7 @@ from pi_trec.config import (
     SupportJudgeConfig,
     SupportMetricRowsConfig,
     SupportMetricsConfig,
+    SupportResolveReferencesConfig,
     SupportSummarizeConfig,
     UmbrelaJudgeConfig,
     ValidateConfig,
@@ -283,6 +284,17 @@ def build_parser() -> argparse.ArgumentParser:
     add_runner_args(support_judge)
     support_judge.add_argument("--include-prompt", action="store_true", default=SUPPRESS)
     finish(support_judge, config_cls=SupportJudgeConfig, handler=support.judge)
+    support_resolve = support_subparsers.add_parser(
+        "resolve-references", help="Resolve RAG answer references to passage text for support judging."
+    )
+    support_resolve.add_argument("--input-file", type=Path, default=SUPPRESS)
+    support_resolve.add_argument("--output-file", type=Path, default=SUPPRESS)
+    support_resolve.add_argument("--pyserini-api", default=SUPPRESS, help="Optional Pyserini HTTP API base URL.")
+    support_resolve.add_argument("--pyserini-index", default=SUPPRESS)
+    support_resolve.add_argument("--read-limit", type=int, default=SUPPRESS)
+    support_resolve.add_argument("--read-word-limit", type=int, default=SUPPRESS)
+    support_resolve.add_argument("--token-env", default=SUPPRESS)
+    finish(support_resolve, config_cls=SupportResolveReferencesConfig, handler=support.resolve_references)
     support_metrics = support_subparsers.add_parser(
         "metrics", help="Compute weighted/hard support precision and recall by topic/run."
     )

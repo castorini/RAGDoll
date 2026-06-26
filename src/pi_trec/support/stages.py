@@ -37,8 +37,11 @@ def _tasks_from_answer_row(record: dict[str, Any], *, record_index: int) -> list
             "TREC answer rows with `answer`, `references`, and resolved `segments`"
         )
     tasks: list[dict[str, Any]] = []
-    topic_id = str(record.get("topic_id", f"record{record_index:06d}"))
-    run_id = str(record.get("run_id", "run"))
+    metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+    topic_id = str(
+        record.get("topic_id") or metadata.get("narrative_id") or metadata.get("topic_id") or f"record{record_index:06d}"
+    )
+    run_id = str(record.get("run_id") or metadata.get("run_id") or metadata.get("team_id") or "run")
     for sentence_index, sentence in enumerate(answer):
         if not isinstance(sentence, dict) or not isinstance(sentence.get("text"), str):
             continue

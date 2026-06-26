@@ -6,6 +6,7 @@ from pi_trec.support.prompts import (
     parse_support_label,
     render_support_prompt,
 )
+from pi_trec.support.resolve import resolve_references
 from pi_trec.support.stages import iter_support_tasks, materialize
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "metric_lines",
     "parse_support_label",
     "render_support_prompt",
+    "resolve_references",
     "summarize",
     "support_metric",
     "support_metric_rows",

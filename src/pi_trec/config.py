@@ -325,6 +325,22 @@ class SupportJudgeConfig(RunConfig):
 
 
 @dataclass
+class SupportResolveReferencesConfig(FileIOConfig):
+    """`support resolve-references`: attach cited passage text to RAG answers."""
+
+    pyserini_api: str | None = None
+    pyserini_index: str | None = None
+    read_limit: int = 200
+    read_word_limit: int = 4096
+    token_env: str = "PYSERINI_API_TOKEN"
+
+    def validate(self) -> None:
+        super().validate()
+        if self.pyserini_index is None:
+            raise SystemExit("support resolve-references requires --pyserini-index")
+
+
+@dataclass
 class SupportMetricsConfig(FileIOConfig):
     """`support metrics`: score support judgments by topic/run."""
 

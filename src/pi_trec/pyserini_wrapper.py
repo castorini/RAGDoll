@@ -126,6 +126,10 @@ def _doc_payload_text(payload: Any) -> str:
     if isinstance(payload, str):
         return payload
     if isinstance(payload, dict):
+        title = payload.get("title")
+        segment = payload.get("segment")
+        if isinstance(title, str) and isinstance(segment, str):
+            return f"{title}: {segment}"
         for key in ("contents", "content", "text", "body"):
             value = payload.get(key)
             if isinstance(value, str):
