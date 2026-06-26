@@ -330,6 +330,62 @@ class SupportMetricsConfig(FileIOConfig):
 
 
 @dataclass
+class SupportMetricRowsConfig(FileIOConfig):
+    """`support metric-rows`: convert support metric JSONL to run/topic/metric rows."""
+
+    metrics: list[str] = dataclasses.field(
+        default_factory=lambda: [
+            "weighted_precision_first",
+            "weighted_recall_first",
+            "weighted_precision_all",
+            "weighted_recall_all",
+        ]
+    )
+
+
+@dataclass
+class SupportAssembleConfig(BaseConfig):
+    """`support assemble`: build human-style assignment JSONL from answers + judgments."""
+
+    answers_file: Path | None = None
+    judgments: list[Path] = dataclasses.field(default_factory=list)
+    output_file: Path | None = None
+    run_id: str | None = None
+
+    _required: ClassVar[tuple[str, ...]] = ("answers_file", "output_file")
+
+    def validate(self) -> None:
+        super().validate()
+        if not self.judgments:
+            raise SystemExit("support assemble requires at least one --judgments file or directory")
+
+
+@dataclass
+class SupportSummarizeConfig(BaseConfig):
+    """`support summarize`: assignments + metrics + metric rows for runfiles."""
+
+    answers: list[Path] = dataclasses.field(default_factory=list)
+    answers_dir: Path | None = None
+    judgments_root: Path | None = None
+    output_dir: Path | None = None
+    metrics: list[str] = dataclasses.field(
+        default_factory=lambda: [
+            "weighted_precision_first",
+            "weighted_recall_first",
+            "weighted_precision_all",
+            "weighted_recall_all",
+        ]
+    )
+
+    _required: ClassVar[tuple[str, ...]] = ("judgments_root", "output_dir")
+
+    def validate(self) -> None:
+        super().validate()
+        if bool(self.answers) == bool(self.answers_dir):
+            raise SystemExit("support summarize requires exactly one of --answers or --answers-dir")
+
+
+@dataclass
 class ArenaCompareAllConfig(RunConfig):
     """`arena compare-all`: rank systems from pairwise LLM-judge battles."""
 

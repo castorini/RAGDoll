@@ -4,15 +4,26 @@ from pathlib import Path
 
 import yaml
 
-from pi_trec.config import SupportJudgeConfig, SupportMetricsConfig
+from pi_trec.config import (
+    SupportAssembleConfig,
+    SupportJudgeConfig,
+    SupportMetricRowsConfig,
+    SupportMetricsConfig,
+    SupportSummarizeConfig,
+)
 from pi_trec.support import (
     SUPPORT_EVAL_PROMPT,
+    assemble,
+    assemble_support_assignments,
     compute_metrics,
     iter_support_tasks,
     judge,
+    metric_lines,
     parse_support_label,
     render_support_prompt,
+    summarize,
     support_metric,
+    write_metric_rows,
 )
 
 UPSTREAM = Path(__file__).resolve().parent / "fixtures" / "upstream"
@@ -114,7 +125,7 @@ def test_support_metric_matches_reference_arithmetic() -> None:
             "sentences": [
                 {"citations": [{"support": "2"}]},
                 {"citations": [{"support": "1"}]},
-                {"citations": [{"support": "0"}]},
+                {"citations": [{"support": "0"}, {"support": "2"}]},
                 {"citations": [{"support": "-1"}]},
                 {"citations": []},
             ],
@@ -126,6 +137,10 @@ def test_support_metric_matches_reference_arithmetic() -> None:
     assert metric.hard_precision == 1 / 3
     assert metric.weighted_recall == 0.375
     assert metric.hard_recall == 0.25
+    assert metric.weighted_precision_first == 0.5
+    assert metric.weighted_recall_first == 0.375
+    assert metric.weighted_precision_all == 2 / 3
+    assert metric.weighted_recall_all == 0.5
     assert metric.sentences == 5
 
 
@@ -151,6 +166,10 @@ def test_support_metrics_writes_jsonl(tmp_path: Path) -> None:
         {
             "topic_id": "14",
             "run_id": "r1",
+            "weighted_precision_first": 1.0,
+            "weighted_recall_first": 1.0,
+            "weighted_precision_all": 1.0,
+            "weighted_recall_all": 1.0,
             "weighted_precision": 1.0,
             "hard_precision": 1.0,
             "weighted_recall": 1.0,
@@ -160,6 +179,10 @@ def test_support_metrics_writes_jsonl(tmp_path: Path) -> None:
         {
             "topic_id": "15",
             "run_id": "r2",
+            "weighted_precision_first": 0.0,
+            "weighted_recall_first": 0.0,
+            "weighted_precision_all": 0.0,
+            "weighted_recall_all": 0.0,
             "weighted_precision": 0.0,
             "hard_precision": 0.0,
             "weighted_recall": 0.0,
@@ -167,6 +190,236 @@ def test_support_metrics_writes_jsonl(tmp_path: Path) -> None:
             "sentences": 1,
         },
     ]
+
+
+def test_metric_lines_group_by_run_metric_then_topic() -> None:
+    rows = [
+        {
+            "topic_id": "72",
+            "run_id": "activity-manufacturer",
+            "weighted_precision_first": 0.521,
+            "weighted_recall_first": 0.521,
+            "weighted_precision_all": 0.6,
+            "weighted_recall_all": 0.6,
+        },
+        {
+            "topic_id": "14",
+            "run_id": "activity-manufacturer",
+            "weighted_precision_first": 0.433333,
+            "weighted_recall_first": 0.433333,
+            "weighted_precision_all": 0.5,
+            "weighted_recall_all": 0.5,
+        },
+        {
+            "topic_id": "200",
+            "run_id": "angle-apartment",
+            "weighted_precision_first": 0.155,
+            "weighted_recall_first": 0.155,
+            "weighted_precision_all": 0.2,
+            "weighted_recall_all": 0.2,
+        },
+    ]
+    assert metric_lines(rows) == [
+        "activity-manufacturer 14 weighted_precision_first 0.433333",
+        "activity-manufacturer 72 weighted_precision_first 0.521",
+        "activity-manufacturer 14 weighted_recall_first 0.433333",
+        "activity-manufacturer 72 weighted_recall_first 0.521",
+        "activity-manufacturer 14 weighted_precision_all 0.5",
+        "activity-manufacturer 72 weighted_precision_all 0.6",
+        "activity-manufacturer 14 weighted_recall_all 0.5",
+        "activity-manufacturer 72 weighted_recall_all 0.6",
+        "angle-apartment 200 weighted_precision_first 0.155",
+        "angle-apartment 200 weighted_recall_first 0.155",
+        "angle-apartment 200 weighted_precision_all 0.2",
+        "angle-apartment 200 weighted_recall_all 0.2",
+    ]
+
+
+def test_write_metric_rows(tmp_path: Path) -> None:
+    input_path = tmp_path / "metrics.jsonl"
+    output_path = tmp_path / "metric-rows.txt"
+    input_path.write_text(
+        '{"topic_id":"14","run_id":"r1","weighted_precision_first":0.25,"weighted_recall_first":0.125,"weighted_precision_all":0.5,"weighted_recall_all":0.25,"weighted_precision":0.25,"hard_precision":0.0,"weighted_recall":0.125,"hard_recall":0.0,"sentences":2}\n',
+        encoding="utf-8",
+    )
+
+    write_metric_rows(SupportMetricRowsConfig(input_file=input_path, output_file=output_path, metrics=["hard_precision"]))
+
+    assert output_path.read_text(encoding="utf-8") == "r1 14 hard_precision 0\n"
+
+
+def test_assemble_support_assignments_preserves_answer_shape(tmp_path: Path) -> None:
+    answers = tmp_path / "answers.jsonl"
+    judgments = tmp_path / "judgments.parsed.jsonl"
+    answers.write_text(
+        json.dumps(
+            {
+                "metadata": {"run_id": "r1", "narrative_id": "14"},
+                "references": ["doc-a", "doc-b"],
+                "answer": [
+                    {"text": "first", "citations": [0, 1]},
+                    {"text": "uncited", "citations": []},
+                    {"text": "missing judgment", "citations": [1]},
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    judgments.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in [
+                {
+                    "status": "completed",
+                    "support_label": "FS",
+                    "metadata": {"run_id": "r1", "topic_id": "14", "sentence_index": 0, "citation_index": 0},
+                },
+                {
+                    "status": "completed",
+                    "support_label": "PS",
+                    "metadata": {"run_id": "r1", "topic_id": "14", "sentence_index": 0, "citation_index": 1},
+                },
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = assemble_support_assignments(answers, [judgments])
+
+    assert rows == [
+        {
+            "topic_id": "14",
+            "narrative_id": "14",
+            "run_id": "r1",
+            "sentences": [
+                {
+                    "sentenceID": 0,
+                    "text": "first",
+                    "citations": [
+                        {"citationID": 0, "reference": "doc-a", "support": "2"},
+                        {"citationID": 1, "reference": "doc-b", "support": "1"},
+                    ],
+                },
+                {"sentenceID": 1, "text": "uncited", "citations": []},
+                {
+                    "sentenceID": 2,
+                    "text": "missing judgment",
+                    "citations": [{"citationID": 0, "reference": "doc-b", "support": "-1"}],
+                },
+            ],
+        }
+    ]
+    metric = support_metric(rows[0])
+    assert metric.weighted_precision == 1.0
+    assert metric.weighted_recall == 0.5
+    assert metric.weighted_precision_all == 0.75
+    assert metric.weighted_recall_all == 0.375
+
+
+def test_assemble_writes_assignments(tmp_path: Path) -> None:
+    answers = tmp_path / "r1.jsonl"
+    judgments = tmp_path / "judgments.parsed.jsonl"
+    output = tmp_path / "support_assignments.jsonl"
+    answers.write_text('{"topic_id":"14","answer":[{"text":"s","citations":["d"]}]}\n', encoding="utf-8")
+    judgments.write_text(
+        '{"status":"completed","raw_output":"No Support","metadata":{"run_id":"r1","topic_id":"14","sentence_index":0,"citation_index":0}}\n',
+        encoding="utf-8",
+    )
+
+    assemble(SupportAssembleConfig(answers_file=answers, judgments=[judgments], output_file=output, run_id="r1"))
+
+    row = json.loads(output.read_text(encoding="utf-8"))
+    assert row["run_id"] == "r1"
+    assert row["sentences"][0]["citations"][0]["support"] == "0"
+
+
+def test_assemble_support_assignments_accepts_responses_with_citation_map(tmp_path: Path) -> None:
+    answers = tmp_path / "r1.jsonl"
+    judgments = tmp_path / "judgments.parsed.jsonl"
+    answers.write_text(
+        json.dumps(
+            {
+                "metadata": {"run_id": "r1", "narrative_id": "14"},
+                "responses": [
+                    {"text": "s1", "citations": {"doc-a": 1.0}},
+                    {"text": "s2", "citations": {"doc-b": 1.0, "doc-c": 0.5}},
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    judgments.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in [
+                {
+                    "status": "completed",
+                    "support_label": "FS",
+                    "metadata": {"run_id": "r1", "topic_id": "14", "sentence_index": 0, "citation_index": 0},
+                },
+                {
+                    "status": "completed",
+                    "support_label": "NS",
+                    "metadata": {"run_id": "r1", "topic_id": "14", "sentence_index": 1, "citation_index": 0},
+                },
+                {
+                    "status": "completed",
+                    "support_label": "PS",
+                    "metadata": {"run_id": "r1", "topic_id": "14", "sentence_index": 1, "citation_index": 1},
+                },
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = assemble_support_assignments(answers, [judgments])
+
+    assert rows[0]["sentences"] == [
+        {"sentenceID": 0, "text": "s1", "citations": [{"citationID": 0, "reference": "doc-a", "support": "2"}]},
+        {
+            "sentenceID": 1,
+            "text": "s2",
+            "citations": [
+                {"citationID": 0, "reference": "doc-b", "support": "0"},
+                {"citationID": 1, "reference": "doc-c", "support": "1"},
+            ],
+        },
+    ]
+    metric = support_metric(rows[0])
+    assert metric.weighted_precision_first == 0.5
+    assert metric.weighted_precision_all == 0.625
+
+
+def test_summarize_writes_assignments_metrics_and_rows(tmp_path: Path) -> None:
+    answers_dir = tmp_path / "answers"
+    judgments_root = tmp_path / "judgments"
+    output_dir = tmp_path / "out"
+    answers_dir.mkdir()
+    (judgments_root / "r1").mkdir(parents=True)
+    (answers_dir / "r1").write_text(
+        '{"topic_id":"14","answer":[{"text":"s","citations":["d"]},{"text":"u","citations":[]}]}\n',
+        encoding="utf-8",
+    )
+    (judgments_root / "r1" / "judgments.parsed.jsonl").write_text(
+        '{"status":"completed","support_label":"FS","metadata":{"run_id":"r1","topic_id":"14","sentence_index":0,"citation_index":0}}\n',
+        encoding="utf-8",
+    )
+
+    summarize(SupportSummarizeConfig(answers_dir=answers_dir, judgments_root=judgments_root, output_dir=output_dir))
+
+    assert (output_dir / "support_assignments.jsonl").exists()
+    metrics = [json.loads(line) for line in (output_dir / "support_metrics.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert metrics[0]["weighted_recall"] == 0.5
+    assert (output_dir / "support_metric_rows.txt").read_text(encoding="utf-8") == (
+        "r1 14 weighted_precision_first 1\n"
+        "r1 14 weighted_recall_first 0.5\n"
+        "r1 14 weighted_precision_all 1\n"
+        "r1 14 weighted_recall_all 0.5\n"
+    )
 
 
 def test_support_judge_resume_skips_completed(tmp_path: Path) -> None:
