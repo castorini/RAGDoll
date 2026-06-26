@@ -89,19 +89,17 @@ def test_support_metrics_cli(tmp_path: Path, monkeypatch) -> None:
     row = json.loads(output_path.read_text(encoding="utf-8"))
     assert row["topic_id"] == "14"
     assert row["run_id"] == "r1"
-    assert row["weighted_precision_first"] == 1.0
-    assert row["weighted_recall_first"] == 1.0
-    assert row["weighted_precision_all"] == 1.0
-    assert row["weighted_recall_all"] == 1.0
-    assert row["weighted_precision"] == 1.0
-    assert row["weighted_recall"] == 1.0
+    assert row["weighted_precision_first_citation"] == 1.0
+    assert row["weighted_recall_first_citation"] == 1.0
+    assert row["weighted_precision_all_judged_citations"] == 1.0
+    assert row["weighted_recall_all_judged_citations"] == 1.0
 
 
 def test_support_metric_rows_cli(tmp_path: Path, monkeypatch) -> None:
     input_path = tmp_path / "support-metrics.jsonl"
     output_path = tmp_path / "support-metric-rows.txt"
     input_path.write_text(
-        '{"topic_id":"14","run_id":"r1","weighted_precision_first":0.5,"weighted_recall_first":0.25,"weighted_precision_all":0.75,"weighted_recall_all":0.375,"weighted_precision":0.5,"hard_precision":0.0,"weighted_recall":0.25,"hard_recall":0.0,"sentences":2}\n',
+        '{"topic_id":"14","run_id":"r1","weighted_precision_first_citation":0.5,"weighted_recall_first_citation":0.25,"weighted_precision_all_judged_citations":0.75,"weighted_recall_all_judged_citations":0.375,"hard_precision":0.0,"hard_recall":0.0,"sentences":2}\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(
@@ -119,10 +117,10 @@ def test_support_metric_rows_cli(tmp_path: Path, monkeypatch) -> None:
     )
     main()
     assert output_path.read_text(encoding="utf-8") == (
-        "r1 14 weighted_precision_first 0.5\n"
-        "r1 14 weighted_recall_first 0.25\n"
-        "r1 14 weighted_precision_all 0.75\n"
-        "r1 14 weighted_recall_all 0.375\n"
+        "r1 14 weighted_precision_first_citation 0.5\n"
+        "r1 14 weighted_recall_first_citation 0.25\n"
+        "r1 14 weighted_precision_all_judged_citations 0.75\n"
+        "r1 14 weighted_recall_all_judged_citations 0.375\n"
     )
 
 

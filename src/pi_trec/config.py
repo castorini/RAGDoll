@@ -335,10 +335,10 @@ class SupportMetricRowsConfig(FileIOConfig):
 
     metrics: list[str] = dataclasses.field(
         default_factory=lambda: [
-            "weighted_precision_first",
-            "weighted_recall_first",
-            "weighted_precision_all",
-            "weighted_recall_all",
+            "weighted_precision_first_citation",
+            "weighted_recall_first_citation",
+            "weighted_precision_all_judged_citations",
+            "weighted_recall_all_judged_citations",
         ]
     )
 
@@ -370,10 +370,10 @@ class SupportSummarizeConfig(BaseConfig):
     output_dir: Path | None = None
     metrics: list[str] = dataclasses.field(
         default_factory=lambda: [
-            "weighted_precision_first",
-            "weighted_recall_first",
-            "weighted_precision_all",
-            "weighted_recall_all",
+            "weighted_precision_first_citation",
+            "weighted_recall_first_citation",
+            "weighted_precision_all_judged_citations",
+            "weighted_recall_all_judged_citations",
         ]
     )
 

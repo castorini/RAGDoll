@@ -12,20 +12,18 @@ from pi_trec.jsonl import read_jsonl, write_jsonl
 WEIGHTED_SCORES = {-1: 0.0, 0: 0.0, 1: 0.5, 2: 1.0}
 HARD_SCORES = {-1: 0.0, 0: 0.0, 1: 0.0, 2: 1.0}
 SUPPORT_METRIC_COLUMNS = (
-    "weighted_precision_first",
-    "weighted_recall_first",
-    "weighted_precision_all",
-    "weighted_recall_all",
-    "weighted_precision",
+    "weighted_precision_first_citation",
+    "weighted_recall_first_citation",
+    "weighted_precision_all_judged_citations",
+    "weighted_recall_all_judged_citations",
     "hard_precision",
-    "weighted_recall",
     "hard_recall",
 )
 DEFAULT_METRIC_ROWS = (
-    "weighted_precision_first",
-    "weighted_recall_first",
-    "weighted_precision_all",
-    "weighted_recall_all",
+    "weighted_precision_first_citation",
+    "weighted_recall_first_citation",
+    "weighted_precision_all_judged_citations",
+    "weighted_recall_all_judged_citations",
 )
 
 
@@ -33,13 +31,11 @@ DEFAULT_METRIC_ROWS = (
 class SupportMetric:
     topic_id: str
     run_id: str
-    weighted_precision_first: float
-    weighted_recall_first: float
-    weighted_precision_all: float
-    weighted_recall_all: float
-    weighted_precision: float
+    weighted_precision_first_citation: float
+    weighted_recall_first_citation: float
+    weighted_precision_all_judged_citations: float
+    weighted_recall_all_judged_citations: float
     hard_precision: float
-    weighted_recall: float
     hard_recall: float
     sentences: int
 
@@ -108,23 +104,21 @@ def support_metric(row: dict[str, Any]) -> SupportMetric:
         else:
             all_total_count_sentences -= 1
 
-    weighted_precision_first = (
+    weighted_precision_first_citation = (
         first_weighted_score / first_sent_with_citations if first_sent_with_citations else 0.0
     )
-    weighted_recall_first = first_weighted_score / first_total_count_sentences if first_total_count_sentences else 0.0
-    weighted_precision_all = all_weighted_score / all_sent_with_citations if all_sent_with_citations else 0.0
-    weighted_recall_all = all_weighted_score / all_total_count_sentences if all_total_count_sentences else 0.0
+    weighted_recall_first_citation = first_weighted_score / first_total_count_sentences if first_total_count_sentences else 0.0
+    weighted_precision_all_judged_citations = all_weighted_score / all_sent_with_citations if all_sent_with_citations else 0.0
+    weighted_recall_all_judged_citations = all_weighted_score / all_total_count_sentences if all_total_count_sentences else 0.0
 
     return SupportMetric(
         topic_id=topic_id,
         run_id=run_id,
-        weighted_precision_first=weighted_precision_first,
-        weighted_recall_first=weighted_recall_first,
-        weighted_precision_all=weighted_precision_all,
-        weighted_recall_all=weighted_recall_all,
-        weighted_precision=weighted_precision_first,
+        weighted_precision_first_citation=weighted_precision_first_citation,
+        weighted_recall_first_citation=weighted_recall_first_citation,
+        weighted_precision_all_judged_citations=weighted_precision_all_judged_citations,
+        weighted_recall_all_judged_citations=weighted_recall_all_judged_citations,
         hard_precision=first_hard_score / first_sent_with_citations if first_sent_with_citations else 0.0,
-        weighted_recall=weighted_recall_first,
         hard_recall=first_hard_score / first_total_count_sentences if first_total_count_sentences else 0.0,
         sentences=len(sentences),
     )

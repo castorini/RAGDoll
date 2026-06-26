@@ -133,14 +133,12 @@ def test_support_metric_matches_reference_arithmetic() -> None:
     )
     assert metric.topic_id == "14"
     assert metric.run_id == "r1"
-    assert metric.weighted_precision == 0.5
+    assert metric.weighted_precision_first_citation == 0.5
     assert metric.hard_precision == 1 / 3
-    assert metric.weighted_recall == 0.375
+    assert metric.weighted_recall_first_citation == 0.375
     assert metric.hard_recall == 0.25
-    assert metric.weighted_precision_first == 0.5
-    assert metric.weighted_recall_first == 0.375
-    assert metric.weighted_precision_all == 2 / 3
-    assert metric.weighted_recall_all == 0.5
+    assert metric.weighted_precision_all_judged_citations == 2 / 3
+    assert metric.weighted_recall_all_judged_citations == 0.5
     assert metric.sentences == 5
 
 
@@ -166,26 +164,22 @@ def test_support_metrics_writes_jsonl(tmp_path: Path) -> None:
         {
             "topic_id": "14",
             "run_id": "r1",
-            "weighted_precision_first": 1.0,
-            "weighted_recall_first": 1.0,
-            "weighted_precision_all": 1.0,
-            "weighted_recall_all": 1.0,
-            "weighted_precision": 1.0,
+            "weighted_precision_first_citation": 1.0,
+            "weighted_recall_first_citation": 1.0,
+            "weighted_precision_all_judged_citations": 1.0,
+            "weighted_recall_all_judged_citations": 1.0,
             "hard_precision": 1.0,
-            "weighted_recall": 1.0,
             "hard_recall": 1.0,
             "sentences": 1,
         },
         {
             "topic_id": "15",
             "run_id": "r2",
-            "weighted_precision_first": 0.0,
-            "weighted_recall_first": 0.0,
-            "weighted_precision_all": 0.0,
-            "weighted_recall_all": 0.0,
-            "weighted_precision": 0.0,
+            "weighted_precision_first_citation": 0.0,
+            "weighted_recall_first_citation": 0.0,
+            "weighted_precision_all_judged_citations": 0.0,
+            "weighted_recall_all_judged_citations": 0.0,
             "hard_precision": 0.0,
-            "weighted_recall": 0.0,
             "hard_recall": 0.0,
             "sentences": 1,
         },
@@ -197,41 +191,41 @@ def test_metric_lines_group_by_run_metric_then_topic() -> None:
         {
             "topic_id": "72",
             "run_id": "activity-manufacturer",
-            "weighted_precision_first": 0.521,
-            "weighted_recall_first": 0.521,
-            "weighted_precision_all": 0.6,
-            "weighted_recall_all": 0.6,
+            "weighted_precision_first_citation": 0.521,
+            "weighted_recall_first_citation": 0.521,
+            "weighted_precision_all_judged_citations": 0.6,
+            "weighted_recall_all_judged_citations": 0.6,
         },
         {
             "topic_id": "14",
             "run_id": "activity-manufacturer",
-            "weighted_precision_first": 0.433333,
-            "weighted_recall_first": 0.433333,
-            "weighted_precision_all": 0.5,
-            "weighted_recall_all": 0.5,
+            "weighted_precision_first_citation": 0.433333,
+            "weighted_recall_first_citation": 0.433333,
+            "weighted_precision_all_judged_citations": 0.5,
+            "weighted_recall_all_judged_citations": 0.5,
         },
         {
             "topic_id": "200",
             "run_id": "angle-apartment",
-            "weighted_precision_first": 0.155,
-            "weighted_recall_first": 0.155,
-            "weighted_precision_all": 0.2,
-            "weighted_recall_all": 0.2,
+            "weighted_precision_first_citation": 0.155,
+            "weighted_recall_first_citation": 0.155,
+            "weighted_precision_all_judged_citations": 0.2,
+            "weighted_recall_all_judged_citations": 0.2,
         },
     ]
     assert metric_lines(rows) == [
-        "activity-manufacturer 14 weighted_precision_first 0.433333",
-        "activity-manufacturer 72 weighted_precision_first 0.521",
-        "activity-manufacturer 14 weighted_recall_first 0.433333",
-        "activity-manufacturer 72 weighted_recall_first 0.521",
-        "activity-manufacturer 14 weighted_precision_all 0.5",
-        "activity-manufacturer 72 weighted_precision_all 0.6",
-        "activity-manufacturer 14 weighted_recall_all 0.5",
-        "activity-manufacturer 72 weighted_recall_all 0.6",
-        "angle-apartment 200 weighted_precision_first 0.155",
-        "angle-apartment 200 weighted_recall_first 0.155",
-        "angle-apartment 200 weighted_precision_all 0.2",
-        "angle-apartment 200 weighted_recall_all 0.2",
+        "activity-manufacturer 14 weighted_precision_first_citation 0.433333",
+        "activity-manufacturer 72 weighted_precision_first_citation 0.521",
+        "activity-manufacturer 14 weighted_recall_first_citation 0.433333",
+        "activity-manufacturer 72 weighted_recall_first_citation 0.521",
+        "activity-manufacturer 14 weighted_precision_all_judged_citations 0.5",
+        "activity-manufacturer 72 weighted_precision_all_judged_citations 0.6",
+        "activity-manufacturer 14 weighted_recall_all_judged_citations 0.5",
+        "activity-manufacturer 72 weighted_recall_all_judged_citations 0.6",
+        "angle-apartment 200 weighted_precision_first_citation 0.155",
+        "angle-apartment 200 weighted_recall_first_citation 0.155",
+        "angle-apartment 200 weighted_precision_all_judged_citations 0.2",
+        "angle-apartment 200 weighted_recall_all_judged_citations 0.2",
     ]
 
 
@@ -239,7 +233,7 @@ def test_write_metric_rows(tmp_path: Path) -> None:
     input_path = tmp_path / "metrics.jsonl"
     output_path = tmp_path / "metric-rows.txt"
     input_path.write_text(
-        '{"topic_id":"14","run_id":"r1","weighted_precision_first":0.25,"weighted_recall_first":0.125,"weighted_precision_all":0.5,"weighted_recall_all":0.25,"weighted_precision":0.25,"hard_precision":0.0,"weighted_recall":0.125,"hard_recall":0.0,"sentences":2}\n',
+        '{"topic_id":"14","run_id":"r1","weighted_precision_first_citation":0.25,"weighted_recall_first_citation":0.125,"weighted_precision_all_judged_citations":0.5,"weighted_recall_all_judged_citations":0.25,"hard_precision":0.0,"hard_recall":0.0,"sentences":2}\n',
         encoding="utf-8",
     )
 
@@ -312,10 +306,10 @@ def test_assemble_support_assignments_preserves_answer_shape(tmp_path: Path) -> 
         }
     ]
     metric = support_metric(rows[0])
-    assert metric.weighted_precision == 1.0
-    assert metric.weighted_recall == 0.5
-    assert metric.weighted_precision_all == 0.75
-    assert metric.weighted_recall_all == 0.375
+    assert metric.weighted_precision_first_citation == 1.0
+    assert metric.weighted_recall_first_citation == 0.5
+    assert metric.weighted_precision_all_judged_citations == 0.75
+    assert metric.weighted_recall_all_judged_citations == 0.375
 
 
 def test_assemble_writes_assignments(tmp_path: Path) -> None:
@@ -390,8 +384,8 @@ def test_assemble_support_assignments_accepts_responses_with_citation_map(tmp_pa
         },
     ]
     metric = support_metric(rows[0])
-    assert metric.weighted_precision_first == 0.5
-    assert metric.weighted_precision_all == 0.625
+    assert metric.weighted_precision_first_citation == 0.5
+    assert metric.weighted_precision_all_judged_citations == 0.625
 
 
 def test_summarize_writes_assignments_metrics_and_rows(tmp_path: Path) -> None:
@@ -413,12 +407,12 @@ def test_summarize_writes_assignments_metrics_and_rows(tmp_path: Path) -> None:
 
     assert (output_dir / "support_assignments.jsonl").exists()
     metrics = [json.loads(line) for line in (output_dir / "support_metrics.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert metrics[0]["weighted_recall"] == 0.5
+    assert metrics[0]["weighted_recall_first_citation"] == 0.5
     assert (output_dir / "support_metric_rows.txt").read_text(encoding="utf-8") == (
-        "r1 14 weighted_precision_first 1\n"
-        "r1 14 weighted_recall_first 0.5\n"
-        "r1 14 weighted_precision_all 1\n"
-        "r1 14 weighted_recall_all 0.5\n"
+        "r1 14 weighted_precision_first_citation 1\n"
+        "r1 14 weighted_recall_first_citation 0.5\n"
+        "r1 14 weighted_precision_all_judged_citations 1\n"
+        "r1 14 weighted_recall_all_judged_citations 0.5\n"
     )
 
 
