@@ -4,13 +4,15 @@ from pathlib import Path
 
 import yaml
 
-from pi_trec.config import SupportJudgeConfig
+from pi_trec.config import SupportJudgeConfig, SupportMetricsConfig
 from pi_trec.support import (
     SUPPORT_EVAL_PROMPT,
+    compute_metrics,
     iter_support_tasks,
     judge,
     parse_support_label,
     render_support_prompt,
+    support_metric,
 )
 
 UPSTREAM = Path(__file__).resolve().parent / "fixtures" / "upstream"
@@ -102,6 +104,69 @@ def test_parse_support_label() -> None:
     assert parse_support_label("partial support") == "PS"
     assert parse_support_label("No Support") == "NS"
     assert parse_support_label("unknown") is None
+
+
+def test_support_metric_matches_reference_arithmetic() -> None:
+    metric = support_metric(
+        {
+            "narrative_id": "14",
+            "run_id": "r1",
+            "sentences": [
+                {"citations": [{"support": "2"}]},
+                {"citations": [{"support": "1"}]},
+                {"citations": [{"support": "0"}]},
+                {"citations": [{"support": "-1"}]},
+                {"citations": []},
+            ],
+        }
+    )
+    assert metric.topic_id == "14"
+    assert metric.run_id == "r1"
+    assert metric.weighted_precision == 0.5
+    assert metric.hard_precision == 1 / 3
+    assert metric.weighted_recall == 0.375
+    assert metric.hard_recall == 0.25
+    assert metric.sentences == 5
+
+
+def test_support_metrics_writes_jsonl(tmp_path: Path) -> None:
+    input_path = tmp_path / "human.jsonl"
+    output_path = tmp_path / "metrics.jsonl"
+    input_path.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in [
+                {"narrative_id": "14", "run_id": "r1", "sentences": [{"citations": [{"support": "2"}]}]},
+                {"topic_id": "15", "run_id": "r2", "sentences": [{"citations": []}]},
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    compute_metrics(SupportMetricsConfig(input_file=input_path, output_file=output_path))
+
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+    assert rows == [
+        {
+            "topic_id": "14",
+            "run_id": "r1",
+            "weighted_precision": 1.0,
+            "hard_precision": 1.0,
+            "weighted_recall": 1.0,
+            "hard_recall": 1.0,
+            "sentences": 1,
+        },
+        {
+            "topic_id": "15",
+            "run_id": "r2",
+            "weighted_precision": 0.0,
+            "hard_precision": 0.0,
+            "weighted_recall": 0.0,
+            "hard_recall": 0.0,
+            "sentences": 1,
+        },
+    ]
 
 
 def test_support_judge_resume_skips_completed(tmp_path: Path) -> None:

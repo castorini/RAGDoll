@@ -54,6 +54,7 @@ from pi_trec.config import (
     RubricGradeConfig,
     RubricScoreConfig,
     SupportJudgeConfig,
+    SupportMetricsConfig,
     UmbrelaJudgeConfig,
     ValidateConfig,
     VisualizeAlignmentConfig,
@@ -279,6 +280,12 @@ def build_parser() -> argparse.ArgumentParser:
     add_runner_args(support_judge)
     support_judge.add_argument("--include-prompt", action="store_true", default=SUPPRESS)
     finish(support_judge, config_cls=SupportJudgeConfig, handler=support.judge)
+    support_metrics = support_subparsers.add_parser(
+        "metrics", help="Compute weighted/hard support precision and recall by topic/run."
+    )
+    support_metrics.add_argument("--input-file", type=Path, default=SUPPRESS)
+    support_metrics.add_argument("--output-file", type=Path, default=SUPPRESS)
+    finish(support_metrics, config_cls=SupportMetricsConfig, handler=support.compute_metrics)
 
     arena_parser = subparsers.add_parser("arena", help="Run Search Arena-style system comparisons.")
     arena_subparsers = arena_parser.add_subparsers(dest="arena_command", required=True)

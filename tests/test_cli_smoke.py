@@ -65,6 +65,34 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
     assert (output_path.parent / "raw-events" / output_path.stem / "support_000001.jsonl").exists()
 
 
+def test_support_metrics_cli(tmp_path: Path, monkeypatch) -> None:
+    input_path = tmp_path / "support-human.jsonl"
+    output_path = tmp_path / "support-metrics.jsonl"
+    input_path.write_text(
+        '{"narrative_id":"14","run_id":"r1","sentences":[{"citations":[{"support":"2"}]}]}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pi-trec",
+            "support",
+            "metrics",
+            "--input-file",
+            str(input_path),
+            "--output-file",
+            str(output_path),
+        ],
+    )
+    main()
+    row = json.loads(output_path.read_text(encoding="utf-8"))
+    assert row["topic_id"] == "14"
+    assert row["run_id"] == "r1"
+    assert row["weighted_precision"] == 1.0
+    assert row["weighted_recall"] == 1.0
+
+
 def test_nuggetizer_agentic_create_cli_with_fake_pi(tmp_path: Path, monkeypatch) -> None:
     fake_pi = tmp_path / "fake_pi.py"
     fake_pi.write_text(

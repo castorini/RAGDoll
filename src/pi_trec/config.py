@@ -325,6 +325,11 @@ class SupportJudgeConfig(RunConfig):
 
 
 @dataclass
+class SupportMetricsConfig(FileIOConfig):
+    """`support metrics`: score support judgments by topic/run."""
+
+
+@dataclass
 class ArenaCompareAllConfig(RunConfig):
     """`arena compare-all`: rank systems from pairwise LLM-judge battles."""
 
