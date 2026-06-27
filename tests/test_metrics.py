@@ -8,11 +8,11 @@ from pi_trec.nuggetizer.metrics import (
     calculate_scores,
     cell_metric,
     compute_metrics,
-    kendall_tau,
     label_distribution,
     normalize_assignment,
     run_means,
 )
+from pi_trec.stats import kendall_tau
 
 
 def test_calculate_scores_matches_reference_semantics() -> None:

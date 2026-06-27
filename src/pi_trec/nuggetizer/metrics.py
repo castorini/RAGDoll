@@ -3,7 +3,7 @@
 Faithful port of the scoring used in the AutoPi reproduction harness
 (``trec2024_compare.py``): per-cell coverage in ``[0, 1]`` over four metrics
 (strict-vital, strict-all, vital, all), run-level aggregation, and a
-SciPy-backed Kendall ``tau`` between a system and a reference assignment.
+Kendall ``tau`` between a system and a reference assignment.
 
 A *cell* is one ``(qid, run_id)`` answer judged against its nugget list. Inputs
 are assignment JSONL rows shaped like::
@@ -22,10 +22,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scipy.stats import kendalltau
-
 from pi_trec.config import NuggetMetricsConfig
 from pi_trec.jsonl import read_jsonl
+from pi_trec.stats import kendall_tau
 
 logger = logging.getLogger("pi_trec.nuggetizer.metrics")
 
@@ -89,15 +88,6 @@ def percentile(values: list[float], p: float) -> float:
     if lo == hi:
         return xs[lo]
     return xs[lo] * (hi - pos) + xs[hi] * (pos - lo)
-
-
-def kendall_tau(xs: list[float], ys: list[float]) -> float:
-    """Kendall ``tau-b`` (ties-aware) via SciPy, matching the reference harness."""
-    pairs = [(x, y) for x, y in zip(xs, ys, strict=False) if not (math.isnan(x) or math.isnan(y))]
-    if len(pairs) < 2:
-        return math.nan
-    tau = kendalltau([x for x, _ in pairs], [y for _, y in pairs], variant="b").statistic
-    return float(tau)
 
 
 def qid_of(row: dict[str, Any]) -> str:
