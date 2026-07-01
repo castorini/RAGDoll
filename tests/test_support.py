@@ -2,8 +2,6 @@ import asyncio
 import json
 from pathlib import Path
 
-import yaml
-
 from pi_trec.config import (
     SupportAssembleConfig,
     SupportJudgeConfig,
@@ -29,9 +27,6 @@ from pi_trec.support import (
 )
 from pi_trec.support import resolve as resolve_mod
 
-UPSTREAM = Path(__file__).resolve().parent / "fixtures" / "upstream"
-SUPPORT_PROMPT_FIXTURE = UPSTREAM / "trec2024-rag" / "support_evaluation_codex_gpt5_5.yaml"
-
 
 def _fake_agent(tmp_path: Path, output_text: str) -> Path:
     agent = tmp_path / "fake_pi.py"
@@ -41,22 +36,61 @@ def _fake_agent(tmp_path: Path, output_text: str) -> Path:
     return agent
 
 
-def test_support_prompt_matches_fixture() -> None:
-    assert SUPPORT_EVAL_PROMPT == yaml.safe_load(SUPPORT_PROMPT_FIXTURE.read_text(encoding="utf-8"))["prefix_user"]
+EXPECTED_SUPPORT_EVAL_PROMPT = (
+    "In this task, you will evaluate whether each statement is supported by its corresponding citations. Note\n"
+    "that the system responses may appear very fluent and well-formed, but contain slight inaccuracies that are\n"
+    "not easy to discern at first glance. Pay close attention to the text.\n"
+    "\n"
+    "You will be provided with a statement and its corresponding passage which the statement cites. It may be\n"
+    "helpful to ask yourself whether it is accurate to say “according to the citation ...” with the statement following this phrase. Be sure to check all of the information in the statement. You will be given three options:\n"
+    "\n"
+    "• Full Support: All of the information in the statement is supported in the citation.\n"
+    "• Partial Support: Some parts of the information are supported in the citation, but other parts are missing.\n"
+    "• No Support: The citation does not support any part of the statement.\n"
+    "\n"
+    "Please provide your response based on the information in the citation. If you are unsure, use your best\n"
+    "judgment. Respond as either “Full Support”, “Partial Support”, or “No Support” with no additional\n"
+    "information.\n"
+    "Statement: {statement}\n"
+    "Citation: {citation}\n"
+)
 
 
-def test_support_prompt_includes_sentence_context() -> None:
-    prompt = render_support_prompt(statement="s", citation="c", sentence_context="before **s** after")
-    assert "Cited Passage: c" in prompt
-    assert "Sentence: s" in prompt
-    assert "Sentence Context: before **s** after" in prompt
+def test_support_prompt_template_byte_identical() -> None:
+    assert SUPPORT_EVAL_PROMPT.encode("utf-8") == EXPECTED_SUPPORT_EVAL_PROMPT.encode("utf-8")
+
+
+def test_support_rendered_prompt_byte_identical() -> None:
+    statement = "café {token}"
+    citation = "multi\nline citation"
+    expected = (
+        "In this task, you will evaluate whether each statement is supported by its corresponding citations. Note\n"
+        "that the system responses may appear very fluent and well-formed, but contain slight inaccuracies that are\n"
+        "not easy to discern at first glance. Pay close attention to the text.\n"
+        "\n"
+        "You will be provided with a statement and its corresponding passage which the statement cites. It may be\n"
+        "helpful to ask yourself whether it is accurate to say “according to the citation ...” with the statement following this phrase. Be sure to check all of the information in the statement. You will be given three options:\n"
+        "\n"
+        "• Full Support: All of the information in the statement is supported in the citation.\n"
+        "• Partial Support: Some parts of the information are supported in the citation, but other parts are missing.\n"
+        "• No Support: The citation does not support any part of the statement.\n"
+        "\n"
+        "Please provide your response based on the information in the citation. If you are unsure, use your best\n"
+        "judgment. Respond as either “Full Support”, “Partial Support”, or “No Support” with no additional\n"
+        "information.\n"
+        "Statement: café {token}\n"
+        "Citation: multi\n"
+        "line citation\n"
+    )
+    prompt = render_support_prompt(statement=statement, citation=citation, sentence_context="before **s** after")
+    assert prompt.encode("utf-8") == expected.encode("utf-8")
 
 
 def test_support_tasks_accept_direct_rows() -> None:
     tasks = iter_support_tasks([{"task_id": "t", "statement": "s", "citation": "c"}])
     assert tasks[0]["task_id"] == "t"
-    assert "Sentence: s" in tasks[0]["instruction"]
-    assert "Sentence Context: **s**" in tasks[0]["instruction"]
+    expected = render_support_prompt(statement="s", citation="c")
+    assert tasks[0]["instruction"].encode("utf-8") == expected.encode("utf-8")
 
 
 def test_support_tasks_accept_direct_rows_with_sentence_context() -> None:
@@ -71,7 +105,7 @@ def test_support_tasks_accept_direct_rows_with_sentence_context() -> None:
         ]
     )
     expected = "The response discusses peer support. **It helps.**"
-    assert f"Sentence Context: {expected}" in tasks[0]["instruction"]
+    assert "Sentence Context" not in tasks[0]["instruction"]
     assert tasks[0]["metadata"]["sentence_context"] == expected
 
 
@@ -124,7 +158,7 @@ def test_support_tasks_build_full_answer_context() -> None:
     )
     expected = "First sentence. **Second sentence.** Third sentence."
     assert tasks[0]["metadata"]["sentence_context"] == expected
-    assert f"Sentence Context: {expected}" in tasks[0]["instruction"]
+    assert "Sentence Context" not in tasks[0]["instruction"]
 
 
 def test_parse_support_label() -> None:
@@ -486,6 +520,30 @@ def test_assemble_writes_assignments(tmp_path: Path) -> None:
     row = json.loads(output.read_text(encoding="utf-8"))
     assert row["run_id"] == "r1"
     assert row["sentences"][0]["citations"][0]["support"] == "0"
+
+
+def test_assemble_support_assignments_accepts_nested_source_metadata(tmp_path: Path) -> None:
+    answers = tmp_path / "r1.jsonl"
+    judgments = tmp_path / "judgments.parsed.jsonl"
+    answers.write_text(
+        '{"metadata":{"run_id":"r1","narrative_id":"14"},"references":["d"],"answer":[{"text":"s","citations":[0]}]}\n',
+        encoding="utf-8",
+    )
+    judgments.write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "support_label": "FS",
+                "metadata": {"source": {"run_id": "r1", "topic_id": "14", "sentence_index": 0, "citation_index": 0}},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = assemble_support_assignments(answers, [judgments])
+
+    assert rows[0]["sentences"][0]["citations"][0]["support"] == "2"
 
 
 def test_assemble_support_assignments_accepts_responses_with_citation_map(tmp_path: Path) -> None:

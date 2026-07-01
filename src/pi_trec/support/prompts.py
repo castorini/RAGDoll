@@ -1,52 +1,21 @@
 from __future__ import annotations
 
-SUPPORT_EVAL_PROMPT = """For the RAG track, computer systems have been given a set of topics (where each topic is a question with a complex answer, such as "what is vicarious trauma and how can it be coped with"), and they have retrieved text passages and have generated answers in response to each question, including citation of which passages support which sentences in the response.
+SUPPORT_EVAL_PROMPT = """In this task, you will evaluate whether each statement is supported by its corresponding citations. Note
+that the system responses may appear very fluent and well-formed, but contain slight inaccuracies that are
+not easy to discern at first glance. Pay close attention to the text.
 
-The mission of RAG assessors will be to assess the quality of both the retrieved passages and the generated responses. You will perform 3 types of assessments for each assessed topic:
+You will be provided with a statement and its corresponding passage which the statement cites. It may be
+helpful to ask yourself whether it is accurate to say “according to the citation ...” with the statement following this phrase. Be sure to check all of the information in the statement. You will be given three options:
 
-1. Passage Relevance: Judge whether the retrieved passage provides an answer to the question.
-2. Support: Judge whether the generated response is supported by the passages that are cited as providing support for the response.
-3. Nuggets: Create a list of information nuggets (small "facts") that should be returned in a good answer to the question, and determine which nuggets are included in each generated response.
+• Full Support: All of the information in the statement is supported in the citation.
+• Partial Support: Some parts of the information are supported in the citation, but other parts are missing.
+• No Support: The citation does not support any part of the statement.
 
-In RAG assessment Task 1, you have already judged the quality of the retrieved passages for some topics. For this task, RAG assessment Task 2, you will judge whether the generated response is supported by the passages that are cited as providing support for the response.
-
-The AI systems that are generating these responses can sometimes generate sentences that make statements that can't be backed up by any sources; therefore, it's important that these AI systems be able to cite sources (Web passages) that support the statements made in their sentences.
-
-The remainder of this document describes assessment Task 2: Support assessment. We will have only a single phase for Support assessment for each topic. You will not judge whether a sentence requires a citation. Instead, you will only be shown pairs of cited passages and sentences and will judge whether the cited passage supports the sentence.
-
-You will be provided with the following fields:
-
-- Cited Passage: the passage that was cited for this Sentence
-- Sentence: the sentence that has cited the passage in Cited Passage
-- Sentence Context: The full response in which the sentence appears; the sentence itself is displayed in bold typeface in the Sentence Context. Because sentences are not necessarily displayed in the order in which they appear in a response, the Sentence Context can help you interpret the sentence, in case you need more context to understand what the sentence is saying (e.g., if the sentence has a pronoun and you need to determine what the pronoun is referring to).
-
-For Support Annotation, you will be shown a single cited passage for each sentence and will evaluate whether the sentence is supported by its corresponding cited passage. You should interpret the sentence in the context of the response in which it appears (i.e., the "Sentence Context"). Note that the AI system responses may appear very fluent and well-formed but contain slight inaccuracies that are not easy to discern at first glance. Pay close attention to the text. Read it carefully as you would when proofreading.
-
-Individual Citation:
-
-Given a sentence and its cited passage, judge whether the passage supports the sentence. It may be helpful to ask yourself whether it is accurate to say "according to the cited passage" with the sentence following this phrase.
-
-For example, if the sentence is "Barack Obama was born in Hawaii", then ask yourself whether it is accurate to say: "According to the cited passage, Barack Obama was born in Hawaii." Be sure to check all of the information in the sentence.
-
-You should judge the citation on a three-point scale:
-
-- "Full Support": All of the information in the sentence is supported in the cited passage.
-- "Partial Support": Only some of the information in the sentence is supported in the cited passage, but other parts of the information are missing from the cited passage.
-- "No Support": The cited passage does not support any part of the statement made by the sentence.
-
-Please provide your best judgment based on the information in the cited passage and the information stated in the sentence (when interpreted in the context of what has been said earlier in the system response).
-
-The degree of support that the cited passage provides for a sentence should be judged on its own merits; that is, the cited passage does (or does not) support the sentence regardless of whether other cited passages support the same sentence. (And if you see identical passages and identical sentences having identical interpretations, you should give them the same judgment!).
-
-Support can be viewed as a kind of relevance, where you're asking about the "relevance" of the cited passage to the sentence (rather than the relevance of a document to a query). Like document/topic relevance, support is a somewhat subjective concept, and there may be gray areas where different people may disagree on some judgments; however, it is important that you make your decision consistently. Note that when judging whether a cited passage supports a sentence, you should ignore whether or not the sentence and passage are relevant to the topic; support judgment is independent of topic relevance.
-
-Cited Passage: {citation}
-
-Sentence: {statement}
-
-Sentence Context: {sentence_context}
-
-Respond as either "Full Support", "Partial Support", or "No Support" with no additional information.
+Please provide your response based on the information in the citation. If you are unsure, use your best
+judgment. Respond as either “Full Support”, “Partial Support”, or “No Support” with no additional
+information.
+Statement: {statement}
+Citation: {citation}
 """
 
 

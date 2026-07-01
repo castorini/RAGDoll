@@ -80,12 +80,27 @@ def _judgment_key(row: dict[str, Any]) -> tuple[str, str, int, int] | None:
     metadata = row.get("metadata")
     if not isinstance(metadata, dict):
         return None
+    source = metadata.get("source") if isinstance(metadata.get("source"), dict) else {}
     try:
         return (
-            str(metadata.get("run_id") or ""),
-            str(metadata.get("topic_id") or metadata.get("narrative_id") or ""),
-            int(metadata.get("sentence_index")),
-            int(metadata.get("citation_index")),
+            str(metadata.get("run_id") or source.get("run_id") or ""),
+            str(
+                metadata.get("topic_id")
+                or metadata.get("narrative_id")
+                or source.get("topic_id")
+                or source.get("narrative_id")
+                or ""
+            ),
+            int(
+                metadata.get("sentence_index")
+                if metadata.get("sentence_index") is not None
+                else source.get("sentence_index")
+            ),
+            int(
+                metadata.get("citation_index")
+                if metadata.get("citation_index") is not None
+                else source.get("citation_index")
+            ),
         )
     except (TypeError, ValueError):
         return None

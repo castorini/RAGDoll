@@ -273,8 +273,8 @@ uv run pi-trec support summarize \
 It writes `support_assignments.jsonl`, `support_metrics.jsonl`, and
 `support_metric_rows.txt` under the output directory.
 
-The support prompt follows the TREC RAG Task assessor-facing support
-instructions, using `Cited Passage`, `Sentence`, and `Sentence Context` fields.
+The support prompt asks the judge to label a `Statement` against its cited
+`Citation` as `Full Support`, `Partial Support`, or `No Support`.
 
 ## Isolated Rubric Scoring
 
