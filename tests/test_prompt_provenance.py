@@ -34,6 +34,7 @@ from pi_trec.nuggetizer import (
     render_create_prompt,
     render_score_prompt,
 )
+from pi_trec.support import SUPPORT_EVAL_PROMPT, render_support_prompt
 from pi_trec.umbrela import (
     UMBRELA_ZERO_BASIC,
     UMBRELA_ZERO_BING,
@@ -47,6 +48,10 @@ UPSTREAM = Path(__file__).resolve().parent / "fixtures" / "upstream"
 def _yaml_template(rel: str) -> tuple[str, str]:
     data = yaml.safe_load((UPSTREAM / rel).read_text(encoding="utf-8"))
     return str(data["system_message"]), str(data["prefix_user"])
+
+
+def _text_template(rel: str) -> str:
+    return (UPSTREAM / rel).read_text(encoding="utf-8")
 
 
 def _castorini_umbrela(prompt_type: str, *, query: str, passage: str) -> str:
@@ -213,3 +218,19 @@ def test_nugget_system_messages_match_upstream() -> None:
     assert NUGGET_SCORER_SYSTEM == _yaml_template("nuggetizer/scorer_template.yaml")[0]
     assert NUGGET_ASSIGNER_SYSTEM == _yaml_template("nuggetizer/assigner_template.yaml")[0]
     assert NUGGET_ASSIGNER_SYSTEM == _yaml_template("nuggetizer/assigner_2grade_template.yaml")[0]
+
+
+def test_support_prompt_template_byte_identical() -> None:
+    expected = _text_template("trec2024-rag/support_evaluation_original_prompt.txt")
+    assert SUPPORT_EVAL_PROMPT.encode("utf-8") == expected.encode("utf-8")
+
+
+def test_support_rendered_prompt_byte_identical() -> None:
+    statement = "café {token}"
+    citation = "multi\nline citation"
+    expected = _text_template("trec2024-rag/support_evaluation_original_prompt.txt").format(
+        statement=statement,
+        citation=citation,
+    )
+    prompt = render_support_prompt(statement=statement, citation=citation, sentence_context="before **s** after")
+    assert prompt.encode("utf-8") == expected.encode("utf-8")

@@ -11,7 +11,6 @@ from pi_trec.config import (
     SupportSummarizeConfig,
 )
 from pi_trec.support import (
-    SUPPORT_EVAL_PROMPT,
     assemble,
     assemble_support_assignments,
     compute_metrics,
@@ -34,56 +33,6 @@ def _fake_agent(tmp_path: Path, output_text: str) -> Path:
     agent.write_text(f"#!/usr/bin/env python3\nprint({json.dumps(payload)})\n", encoding="utf-8")
     agent.chmod(0o755)
     return agent
-
-
-EXPECTED_SUPPORT_EVAL_PROMPT = (
-    "In this task, you will evaluate whether each statement is supported by its corresponding citations. Note\n"
-    "that the system responses may appear very fluent and well-formed, but contain slight inaccuracies that are\n"
-    "not easy to discern at first glance. Pay close attention to the text.\n"
-    "\n"
-    "You will be provided with a statement and its corresponding passage which the statement cites. It may be\n"
-    "helpful to ask yourself whether it is accurate to say “according to the citation ...” with the statement following this phrase. Be sure to check all of the information in the statement. You will be given three options:\n"
-    "\n"
-    "• Full Support: All of the information in the statement is supported in the citation.\n"
-    "• Partial Support: Some parts of the information are supported in the citation, but other parts are missing.\n"
-    "• No Support: The citation does not support any part of the statement.\n"
-    "\n"
-    "Please provide your response based on the information in the citation. If you are unsure, use your best\n"
-    "judgment. Respond as either “Full Support”, “Partial Support”, or “No Support” with no additional\n"
-    "information.\n"
-    "Statement: {statement}\n"
-    "Citation: {citation}\n"
-)
-
-
-def test_support_prompt_template_byte_identical() -> None:
-    assert SUPPORT_EVAL_PROMPT.encode("utf-8") == EXPECTED_SUPPORT_EVAL_PROMPT.encode("utf-8")
-
-
-def test_support_rendered_prompt_byte_identical() -> None:
-    statement = "café {token}"
-    citation = "multi\nline citation"
-    expected = (
-        "In this task, you will evaluate whether each statement is supported by its corresponding citations. Note\n"
-        "that the system responses may appear very fluent and well-formed, but contain slight inaccuracies that are\n"
-        "not easy to discern at first glance. Pay close attention to the text.\n"
-        "\n"
-        "You will be provided with a statement and its corresponding passage which the statement cites. It may be\n"
-        "helpful to ask yourself whether it is accurate to say “according to the citation ...” with the statement following this phrase. Be sure to check all of the information in the statement. You will be given three options:\n"
-        "\n"
-        "• Full Support: All of the information in the statement is supported in the citation.\n"
-        "• Partial Support: Some parts of the information are supported in the citation, but other parts are missing.\n"
-        "• No Support: The citation does not support any part of the statement.\n"
-        "\n"
-        "Please provide your response based on the information in the citation. If you are unsure, use your best\n"
-        "judgment. Respond as either “Full Support”, “Partial Support”, or “No Support” with no additional\n"
-        "information.\n"
-        "Statement: café {token}\n"
-        "Citation: multi\n"
-        "line citation\n"
-    )
-    prompt = render_support_prompt(statement=statement, citation=citation, sentence_context="before **s** after")
-    assert prompt.encode("utf-8") == expected.encode("utf-8")
 
 
 def test_support_tasks_accept_direct_rows() -> None:

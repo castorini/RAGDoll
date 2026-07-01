@@ -1,0 +1,16 @@
+In this task, you will evaluate whether each statement is supported by its corresponding citations. Note
+that the system responses may appear very fluent and well-formed, but contain slight inaccuracies that are
+not easy to discern at first glance. Pay close attention to the text.
+
+You will be provided with a statement and its corresponding passage which the statement cites. It may be
+helpful to ask yourself whether it is accurate to say “according to the citation ...” with the statement following this phrase. Be sure to check all of the information in the statement. You will be given three options:
+
+• Full Support: All of the information in the statement is supported in the citation.
+• Partial Support: Some parts of the information are supported in the citation, but other parts are missing.
+• No Support: The citation does not support any part of the statement.
+
+Please provide your response based on the information in the citation. If you are unsure, use your best
+judgment. Respond as either “Full Support”, “Partial Support”, or “No Support” with no additional
+information.
+Statement: {statement}
+Citation: {citation}

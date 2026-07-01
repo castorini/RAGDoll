@@ -1,6 +1,12 @@
 from pi_trec.support.assignments import assemble, assemble_support_assignments, summarize
 from pi_trec.support.flows import judge
-from pi_trec.support.metrics import compute_metrics, metric_lines, support_metric, support_metric_rows, write_metric_rows
+from pi_trec.support.metrics import (
+    compute_metrics,
+    metric_lines,
+    support_metric,
+    support_metric_rows,
+    write_metric_rows,
+)
 from pi_trec.support.prompts import (
     SUPPORT_EVAL_PROMPT,
     parse_support_label,
