@@ -120,8 +120,8 @@ First resolve the cited document IDs to passage text. With a Pyserini HTTP API:
 uv run pi-trec support resolve-references \
   --input-file answers.jsonl \
   --output-file answers.resolved.jsonl \
-  --pyserini-api http://127.0.0.1:8081 \
-  --pyserini-index climbmix-400b
+  --pyserini-api http://api.castorini.uwaterloo.ca \
+  --pyserini-index msmarco-v2.1-doc-segmented
 ```
 
 Or directly with a Pyserini index. The index can be a local Lucene index path
@@ -486,7 +486,7 @@ Pi-TREC can expose a Pyserini HTTP endpoint as the Pine-compatible `pi-search`
 
 ```bash
 uv run pi-trec serve pyserini-wrapper \
-  --pyserini-base-url http://127.0.0.1:8081 \
+  --pyserini-base-url http://api.castorini.uwaterloo.ca \
   --pyserini-index msmarco-v2.1-doc-segmented \
   --port 8092 \
   --search-word-limit 512 \

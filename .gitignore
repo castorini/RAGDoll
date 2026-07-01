@@ -32,11 +32,14 @@ htmlcov/
 !.env.example
 *.pem
 *.key
+.curlrc.pyserini-rest
 
 # Logs
 *.log
 
 # Run outputs / artifacts (project-specific)
+data/*
+!data/.gitkeep
 results/
 raw-events/
 scripts/

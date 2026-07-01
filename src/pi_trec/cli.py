@@ -289,7 +289,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     support_resolve.add_argument("--input-file", type=Path, default=SUPPRESS)
     support_resolve.add_argument("--output-file", type=Path, default=SUPPRESS)
-    support_resolve.add_argument("--pyserini-api", default=SUPPRESS, help="Optional Pyserini HTTP API base URL.")
+    support_resolve.add_argument(
+        "--pyserini-api",
+        default=SUPPRESS,
+        help="Pyserini REST API base URL, e.g. http://api.castorini.uwaterloo.ca.",
+    )
     support_resolve.add_argument("--pyserini-index", default=SUPPRESS)
     support_resolve.add_argument("--read-limit", type=int, default=SUPPRESS)
     support_resolve.add_argument("--read-word-limit", type=int, default=SUPPRESS)
