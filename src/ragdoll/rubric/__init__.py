@@ -1,12 +1,12 @@
-from pi_trec.rubric.flows import author, grade, rubric_eval_pipeline
-from pi_trec.rubric.metrics import (
+from ragdoll.rubric.flows import author, grade, rubric_eval_pipeline
+from ragdoll.rubric.metrics import (
     CellScore,
     cell_score,
     compute_scores,
     score_response,
     verdict_value,
 )
-from pi_trec.rubric.prompts import (
+from ragdoll.rubric.prompts import (
     CRITERION_TYPES,
     RUBRIC_AUTHOR_SYSTEM,
     RUBRIC_AUTHOR_USER,
@@ -19,7 +19,7 @@ from pi_trec.rubric.prompts import (
     render_author_prompt,
     render_grade_prompt,
 )
-from pi_trec.rubric.stages import (
+from ragdoll.rubric.stages import (
     direct_grade_inputs,
     iter_author_inputs,
     iter_grade_payloads_from_files,

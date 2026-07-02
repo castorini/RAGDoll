@@ -1,7 +1,7 @@
-from pi_trec.arena.flows import compare_all, materialize
-from pi_trec.arena.metrics import fit_arena_ratings, leaderboard_rows, pairwise_rows
-from pi_trec.arena.prompts import ARENA_JUDGE_PROMPT, parse_verdict, render_arena_prompt
-from pi_trec.arena.stages import (
+from ragdoll.arena.flows import compare_all, materialize
+from ragdoll.arena.metrics import fit_arena_ratings, leaderboard_rows, pairwise_rows
+from ragdoll.arena.prompts import ARENA_JUDGE_PROMPT, parse_verdict, render_arena_prompt
+from ragdoll.arena.stages import (
     battles_for_system_degree,
     coverage_rows,
     iter_arena_tasks,

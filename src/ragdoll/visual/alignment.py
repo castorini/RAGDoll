@@ -4,10 +4,10 @@ from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path
 
-from pi_trec.config import VisualizeAlignmentConfig
-from pi_trec.jsonl import read_jsonl
-from pi_trec.nuggetizer.metrics import METRIC_COLUMNS, cell_metric, mean, run_means
-from pi_trec.stats import kendall_tau
+from ragdoll.config import VisualizeAlignmentConfig
+from ragdoll.jsonl import read_jsonl
+from ragdoll.nuggetizer.metrics import METRIC_COLUMNS, cell_metric, mean, run_means
+from ragdoll.stats import kendall_tau
 
 TASKS = ("GEN", "AUGGEN", "COMBINED", "all")
 TOPIC_COLORS = {"GEN": "#1a1ae6", "AUGGEN": "#5512c0", "COMBINED": "#9aa0a6", "all": "#1a1ae6"}
@@ -32,7 +32,7 @@ def _pyplot():
     except ModuleNotFoundError as exc:
         raise SystemExit(
             "matplotlib is required for visualization; install with `uv sync --extra viz` "
-            "or `pip install 'pi-trec[viz]'`"
+            "or `pip install 'ragdoll[viz]'`"
         ) from exc
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt

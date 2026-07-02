@@ -1,6 +1,6 @@
-from pi_trec.nuggetizer.flows import agentic_create, assign, create, eval_pipeline
-from pi_trec.nuggetizer.metrics import compute_metrics
-from pi_trec.nuggetizer.prompts import (
+from ragdoll.nuggetizer.flows import agentic_create, assign, create, eval_pipeline
+from ragdoll.nuggetizer.metrics import compute_metrics
+from ragdoll.nuggetizer.prompts import (
     NUGGET_AGENTIC_CREATOR_SYSTEM,
     NUGGET_AGENTIC_CREATOR_USER,
     NUGGET_ASSIGNER_2GRADE_USER,
@@ -18,7 +18,7 @@ from pi_trec.nuggetizer.prompts import (
     render_create_prompt,
     render_score_prompt,
 )
-from pi_trec.nuggetizer.stages import (
+from ragdoll.nuggetizer.stages import (
     candidate_text,
     create_context,
     direct_assign_inputs,

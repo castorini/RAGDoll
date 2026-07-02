@@ -1,4 +1,4 @@
-from pi_trec.visual.alignment import (
+from ragdoll.visual.alignment import (
     alignment_from_assignments,
     plot_alignment,
     render_alignment,

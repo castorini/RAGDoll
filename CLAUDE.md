@@ -1,4 +1,4 @@
-# Pi-TREC Repository Instructions
+# RAGDoll Repository Instructions
 
 ## Scope
 

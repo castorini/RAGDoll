@@ -1,11 +1,11 @@
-from pi_trec.umbrela.flows import judge
-from pi_trec.umbrela.prompts import (
+from ragdoll.umbrela.flows import judge
+from ragdoll.umbrela.prompts import (
     UMBRELA_ZERO_BASIC,
     UMBRELA_ZERO_BING,
     parse_umbrela_judgment,
     render_umbrela_prompt,
 )
-from pi_trec.umbrela.stages import (
+from ragdoll.umbrela.stages import (
     candidate_passage,
     iter_prompt_tasks,
     materialize,
