@@ -260,13 +260,6 @@ Output: `judgments.jsonl`, `pairwise.csv`, `coverage.csv`, `leaderboard.csv`
 
 ---
 
-## Cost
-
-```bash
-uv run ragdoll cost --raw-events-dir results/TREC2024/rubric-55/raw-events \
-  --input-price 0.25 --output-price 2.0
-```
-
 ## Artifacts
 
 `data/` and `results/` are gitignored (local only):
