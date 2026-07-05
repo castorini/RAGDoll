@@ -248,6 +248,29 @@ def extract_assistant_text(events: Iterable[dict[str, Any]]) -> str:
     return final_text
 
 
+def extract_error_message(events: Iterable[dict[str, Any]]) -> str:
+    messages: list[str] = []
+    for event in events:
+        for key in ("errorMessage", "error"):
+            value = event.get(key)
+            if isinstance(value, str) and value.strip():
+                messages.append(value.strip())
+            elif isinstance(value, dict):
+                text = value.get("message") or value.get("type")
+                if text:
+                    messages.append(str(text))
+        message = event.get("message")
+        if isinstance(message, dict):
+            value = message.get("errorMessage") or message.get("error")
+            if isinstance(value, str) and value.strip():
+                messages.append(value.strip())
+            elif isinstance(value, dict):
+                text = value.get("message") or value.get("type")
+                if text:
+                    messages.append(str(text))
+    return " | ".join(messages)
+
+
 def copy_agent_state(source: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     for filename in AGENT_STATE_FILENAMES:
@@ -361,6 +384,7 @@ async def run_prompt(
 
     elapsed = time.time() - start
     output_text = extract_assistant_text(events)
+    event_error = extract_error_message(events)
     usage = extract_usage(events)
     if timed_out:
         return result_row(
@@ -402,13 +426,16 @@ async def run_prompt(
             usage=usage,
         )
     if not output_text:
+        error = "local agent completed without assistant text"
+        if event_error:
+            error += f": {event_error}"
         return result_row(
             task_id=task_id,
             evaluator=evaluator,
             config=config,
             output_text="",
             status="failed",
-            error="local agent completed without assistant text",
+            error=error,
             elapsed_seconds=elapsed,
             metadata=metadata,
             usage=usage,

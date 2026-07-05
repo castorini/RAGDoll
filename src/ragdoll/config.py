@@ -232,6 +232,10 @@ class MaterializeArenaConfig(BaseConfig):
     sample_battles_per_topic: int | None = None
     sample_battles_per_system_per_topic: float | None = None
     sampling_seed: int | None = None
+    rubrics: bool = False
+    nuggets_file: Path | None = None
+    rubrics_file: Path | None = None
+    prompt_variant: str = "default"
 
     _required: ClassVar[tuple[str, ...]] = ("output_file",)
 
@@ -241,6 +245,12 @@ class MaterializeArenaConfig(BaseConfig):
             raise SystemExit("arena materialize requires either --answers or --answers-dir, not both")
         if not self.answers and self.answers_dir is None:
             raise SystemExit("arena materialize requires --answers files or --answers-dir")
+        if self.nuggets_file is not None and not self.nuggets_file.is_file():
+            raise SystemExit(f"arena materialize --nuggets-file does not exist: {self.nuggets_file}")
+        if self.rubrics_file is not None and not self.rubrics_file.is_file():
+            raise SystemExit(f"arena materialize --rubric-file does not exist: {self.rubrics_file}")
+        if self.nuggets_file is not None and self.rubrics_file is not None:
+            raise SystemExit("arena materialize requires either --nuggets-file or --rubric-file, not both")
         if self.sample_topics_per_pair is not None and self.sample_topics_per_pair <= 0:
             raise SystemExit("arena materialize --sample-topics-per-pair must be positive")
         sampling_modes = [
@@ -412,6 +422,10 @@ class ArenaCompareAllConfig(RunConfig):
     sample_battles_per_topic: int | None = None
     sample_battles_per_system_per_topic: float | None = None
     sampling_seed: int | None = None
+    rubrics: bool = False
+    nuggets_file: Path | None = None
+    rubrics_file: Path | None = None
+    prompt_variant: str = "default"
 
     _required: ClassVar[tuple[str, ...]] = ("output_dir",)
 
@@ -421,6 +435,12 @@ class ArenaCompareAllConfig(RunConfig):
             raise SystemExit("arena compare-all requires either --answers or --answers-dir, not both")
         if not self.answers and self.answers_dir is None:
             raise SystemExit("arena compare-all requires --answers files or --answers-dir")
+        if self.nuggets_file is not None and not self.nuggets_file.is_file():
+            raise SystemExit(f"arena compare-all --nuggets-file does not exist: {self.nuggets_file}")
+        if self.rubrics_file is not None and not self.rubrics_file.is_file():
+            raise SystemExit(f"arena compare-all --rubric-file does not exist: {self.rubrics_file}")
+        if self.nuggets_file is not None and self.rubrics_file is not None:
+            raise SystemExit("arena compare-all requires either --nuggets-file or --rubric-file, not both")
         if self.sample_topics_per_pair is not None and self.sample_topics_per_pair <= 0:
             raise SystemExit("arena compare-all --sample-topics-per-pair must be positive")
         sampling_modes = [

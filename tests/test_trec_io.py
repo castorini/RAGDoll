@@ -57,3 +57,14 @@ def test_read_trec_answers_normalizes_response(tmp_path: Path) -> None:
     assert rows[0]["qid"] == "q1"
     assert rows[0]["answer_text"] == "hello"
     assert rows[0]["answer"][0]["citations"] == [0]
+
+
+def test_read_trec_answers_explicit_run_id_overrides_row_value(tmp_path: Path) -> None:
+    run = _write(
+        tmp_path / "run.jsonl",
+        [{"run_id": "short", "topic_id": "q1", "topic": "what", "answer": [{"text": "hello"}]}],
+    )
+
+    rows = list(read_trec_answers(run, run_id="org.official-run"))
+
+    assert rows[0]["run_id"] == "org.official-run"

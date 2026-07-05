@@ -159,6 +159,34 @@ def build_parser() -> argparse.ArgumentParser:
     materialize_arena.add_argument("--sample-battles-per-topic", type=int, default=SUPPRESS)
     materialize_arena.add_argument("--sample-battles-per-system-per-topic", type=float, default=SUPPRESS)
     materialize_arena.add_argument("--sampling-seed", type=int, default=SUPPRESS)
+    materialize_arena.add_argument("--rubrics", action="store_true", default=SUPPRESS)
+    materialize_arena.add_argument("--nuggets-file", type=Path, default=SUPPRESS)
+    materialize_arena.add_argument("--rubric-file", "--rubrics-file", dest="rubrics_file", type=Path, default=SUPPRESS)
+    materialize_arena.add_argument(
+        "--prompt-variant",
+        choices=[
+            "default",
+            "rich-human-voter",
+            "rich-human-voter-trec",
+            "strict-vital",
+            "dimensions",
+            "checklist",
+            "coverage-count",
+            "coverage-quality",
+            "coverage-accuracy-gate",
+            "coverage-helpful-depth",
+            "coverage-compact-dimensions",
+            "coverage-compact-tiebreak",
+            "coverage-compact-calibrated",
+            "support-plus",
+            "balanced-dimensions",
+            "question-first-dimensions",
+            "expert-preference",
+            "strict-support",
+        ],
+        default=SUPPRESS,
+        help="Arena prompt variant for topic-specific rubric comparisons.",
+    )
     finish(materialize_arena, config_cls=MaterializeArenaConfig, handler=arena.materialize)
 
     umbrela_parser = subparsers.add_parser("umbrela", help="Run UMBRELA-compatible relevance judging.")
@@ -461,6 +489,34 @@ def add_arena_compare_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--answers", type=Path, action="append", default=SUPPRESS)
     parser.add_argument("--answers-dir", type=Path, default=SUPPRESS)
     parser.add_argument("--output-dir", type=Path, default=SUPPRESS)
+    parser.add_argument("--rubrics", action="store_true", default=SUPPRESS)
+    parser.add_argument("--nuggets-file", type=Path, default=SUPPRESS)
+    parser.add_argument("--rubric-file", "--rubrics-file", dest="rubrics_file", type=Path, default=SUPPRESS)
+    parser.add_argument(
+        "--prompt-variant",
+        choices=[
+            "default",
+            "rich-human-voter",
+            "rich-human-voter-trec",
+            "strict-vital",
+            "dimensions",
+            "checklist",
+            "coverage-count",
+            "coverage-quality",
+            "coverage-accuracy-gate",
+            "coverage-helpful-depth",
+            "coverage-compact-dimensions",
+            "coverage-compact-tiebreak",
+            "coverage-compact-calibrated",
+            "support-plus",
+            "balanced-dimensions",
+            "question-first-dimensions",
+            "expert-preference",
+            "strict-support",
+        ],
+        default=SUPPRESS,
+        help="Arena prompt variant for topic-specific rubric comparisons.",
+    )
     parser.add_argument("--raw-events-dir", type=Path, default=SUPPRESS)
     parser.add_argument("--agent-binary", default=SUPPRESS)
     parser.add_argument("--provider", default=SUPPRESS)

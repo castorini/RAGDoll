@@ -32,6 +32,21 @@ class AnswerSet:
         return set(self.rows_by_qid)
 
 
+@dataclass(frozen=True)
+class NuggetRecord:
+    qid: str
+    nuggets: list[dict[str, str]]
+    source: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class RubricRecord:
+    qid: str
+    query: str
+    criteria: list[dict[str, Any]]
+    source: dict[str, Any]
+
+
 def _metadata(row: dict[str, Any]) -> dict[str, Any]:
     return row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
 
@@ -40,6 +55,8 @@ def _first_text(*values: Any) -> str:
     for value in values:
         if isinstance(value, str) and value.strip():
             return value.strip()
+        if isinstance(value, int):
+            return str(value)
     return ""
 
 
@@ -74,11 +91,15 @@ def _answer_sentence_text(answer: Any) -> list[str]:
     return texts
 
 
-def answer_text_of(row: dict[str, Any]) -> str:
+def answer_text_of(row: dict[str, Any]) -> str | None:
     answer_text = row.get("answer_text")
-    if isinstance(answer_text, str) and answer_text.strip():
+    if isinstance(answer_text, str):
         return answer_text.strip()
-    return " ".join(_answer_sentence_text(row.get("answer"))).strip()
+    if "answer" in row:
+        return " ".join(_answer_sentence_text(row.get("answer"))).strip()
+    if "responses" in row:
+        return " ".join(_answer_sentence_text(row.get("responses"))).strip()
+    return None
 
 
 def load_answer_set(path: Path) -> AnswerSet:
@@ -95,7 +116,7 @@ def load_answer_set(path: Path) -> AnswerSet:
             raise ValueError(f"{path}: missing qid/topic_id/metadata.narrative_id")
         if not query:
             raise ValueError(f"{path}:{qid}: missing query/topic/metadata narrative/title")
-        if not answer_text:
+        if answer_text is None:
             raise ValueError(f"{path}:{qid}: missing answer_text or answer[].text")
         if run_id is None:
             run_id = row_run_id
@@ -123,6 +144,132 @@ def load_answer_sets(paths: list[Path]) -> list[AnswerSet]:
             raise ValueError(f"duplicate run_id across answer files: {answer_set.run_id!r}")
         seen.add(answer_set.run_id)
     return sets
+
+
+def _nugget_qid(row: dict[str, Any]) -> str:
+    metadata = _metadata(row)
+    return _first_text(row.get("qid"), row.get("topic_id"), row.get("query_id"), metadata.get("narrative_id"))
+
+
+def _rubric_qid(row: dict[str, Any]) -> str:
+    metadata = _metadata(row)
+    return _first_text(
+        row.get("qid"),
+        row.get("topic_id"),
+        row.get("query_id"),
+        row.get("task_id"),
+        metadata.get("narrative_id"),
+    )
+
+
+def _normalize_nugget(item: Any) -> dict[str, str] | None:
+    if isinstance(item, str):
+        text = item.strip()
+        return {"text": text, "importance": ""} if text else None
+    if not isinstance(item, dict):
+        return None
+    text = str(item.get("text", "")).strip()
+    if not text:
+        return None
+    normalized = {"text": text, "importance": str(item.get("importance", "")).strip()}
+    mapped_sub_narrative = str(item.get("mapped_sub_narrative", "")).strip()
+    if mapped_sub_narrative:
+        normalized["mapped_sub_narrative"] = mapped_sub_narrative
+    return normalized
+
+
+def load_nuggets(path: Path) -> dict[str, NuggetRecord]:
+    records: dict[str, NuggetRecord] = {}
+    for row in read_jsonl(path):
+        qid = _nugget_qid(row)
+        if not qid:
+            raise ValueError(f"{path}: missing qid/topic_id for nugget row")
+        if qid in records:
+            raise ValueError(f"{path}: duplicate nugget qid {qid!r}")
+        nuggets_value = row.get("nuggets")
+        if not isinstance(nuggets_value, list):
+            raise ValueError(f"{path}:{qid}: missing nuggets list")
+        nuggets = [nugget for nugget in (_normalize_nugget(item) for item in nuggets_value) if nugget is not None]
+        if not nuggets:
+            raise ValueError(f"{path}:{qid}: no usable nuggets")
+        records[qid] = NuggetRecord(qid=qid, nuggets=nuggets, source=row)
+    if not records:
+        raise ValueError(f"{path}: no nugget rows found")
+    return records
+
+
+def format_nuggets_for_prompt(nugget_record: NuggetRecord) -> str:
+    lines: list[str] = []
+    for index, nugget in enumerate(nugget_record.nuggets, start=1):
+        importance = nugget.get("importance") or "unlabeled"
+        lines.append(f"{index}. [{importance}] {nugget['text']}")
+    return "\n".join(lines)
+
+
+def _normalize_rubric_criterion(item: Any) -> dict[str, Any] | None:
+    if isinstance(item, str):
+        text = item.strip()
+        return {"text": text} if text else None
+    if not isinstance(item, dict):
+        return None
+    text = str(item.get("text", "")).strip()
+    if not text:
+        return None
+    normalized: dict[str, Any] = {"text": text}
+    for field in ("tier", "type"):
+        value = item.get(field)
+        if value is not None and str(value).strip():
+            normalized[field] = str(value).strip()
+    if item.get("source_nugget") is not None and str(item.get("source_nugget")).strip():
+        normalized["source_nugget"] = str(item.get("source_nugget")).strip()
+    if item.get("weight") is not None:
+        normalized["weight"] = item.get("weight")
+    return normalized
+
+
+def load_rubrics(path: Path) -> dict[str, RubricRecord]:
+    records: dict[str, RubricRecord] = {}
+    for row in read_jsonl(path):
+        qid = _rubric_qid(row)
+        if not qid:
+            raise ValueError(f"{path}: missing qid/topic_id/task_id for rubric row")
+        if qid in records:
+            raise ValueError(f"{path}: duplicate rubric qid {qid!r}")
+        status = row.get("status")
+        if status is not None and status != "completed":
+            raise ValueError(f"{path}:{qid}: rubric row status is {status!r}")
+        criteria_value = row.get("criteria")
+        if not isinstance(criteria_value, list):
+            raise ValueError(f"{path}:{qid}: missing criteria list")
+        criteria = [
+            criterion
+            for criterion in (_normalize_rubric_criterion(item) for item in criteria_value)
+            if criterion is not None
+        ]
+        if not criteria:
+            raise ValueError(f"{path}:{qid}: no usable rubric criteria")
+        records[qid] = RubricRecord(qid=qid, query=query_of(row), criteria=criteria, source=row)
+    if not records:
+        raise ValueError(f"{path}: no rubric rows found")
+    return records
+
+
+def format_rubric_for_prompt(rubric_record: RubricRecord) -> str:
+    lines: list[str] = []
+    for index, criterion in enumerate(rubric_record.criteria, start=1):
+        labels = []
+        tier = str(criterion.get("tier", "")).strip()
+        weight = criterion.get("weight")
+        criterion_type = str(criterion.get("type", "")).strip()
+        if tier:
+            labels.append(tier)
+        if weight is not None:
+            labels.append(f"weight={weight}")
+        if criterion_type:
+            labels.append(criterion_type)
+        label = f" [{', '.join(labels)}]" if labels else ""
+        lines.append(f"{index}.{label} {criterion['text']}")
+    return "\n".join(lines)
 
 
 def assistant_order(seed: int, run_a: str, run_b: str, qid: str) -> tuple[str, str]:
@@ -191,7 +338,21 @@ def sampled_topic_pairs(
     return sorted(sampled)
 
 
-def _arena_task(left: AnswerSet, right: AnswerSet, qid: str, *, seed: int) -> dict[str, Any]:
+def _arena_task(
+    left: AnswerSet,
+    right: AnswerSet,
+    qid: str,
+    *,
+    seed: int,
+    rubrics: bool = False,
+    nuggets_by_qid: dict[str, NuggetRecord] | None = None,
+    nuggets_source: str | None = None,
+    rubrics_by_qid: dict[str, RubricRecord] | None = None,
+    rubrics_source: str | None = None,
+    prompt_variant: str = "default",
+) -> dict[str, Any]:
+    if nuggets_by_qid is not None and rubrics_by_qid is not None:
+        raise ValueError("arena task generation accepts either nuggets_by_qid or rubrics_by_qid, not both")
     left_answer = left.rows_by_qid[qid]
     right_answer = right.rows_by_qid[qid]
     if left_answer.query != right_answer.query:
@@ -200,6 +361,53 @@ def _arena_task(left: AnswerSet, right: AnswerSet, qid: str, *, seed: int) -> di
     by_run_id = {left.run_id: left_answer, right.run_id: right_answer}
     answer_a = by_run_id[assistant_a_run_id]
     answer_b = by_run_id[assistant_b_run_id]
+    metadata = {
+        "pair": [left.run_id, right.run_id],
+        "qid": qid,
+        "query": left_answer.query,
+        "assistant_a_run_id": assistant_a_run_id,
+        "assistant_b_run_id": assistant_b_run_id,
+    }
+    if prompt_variant != "default":
+        metadata["prompt_variant"] = prompt_variant
+    if rubrics:
+        metadata["rubrics"] = True
+    nuggets_prompt = None
+    rubric_prompt = None
+    if nuggets_by_qid is not None:
+        nugget_record = nuggets_by_qid.get(qid)
+        if nugget_record is None:
+            raise ValueError(f"missing nuggets for qid {qid!r}")
+        nuggets_prompt = format_nuggets_for_prompt(nugget_record)
+        metadata.update(
+            {
+                "nuggets": True,
+                "nuggets_qid": qid,
+                "nuggets_count": len(nugget_record.nuggets),
+                "vital_nuggets_count": sum(
+                    1 for nugget in nugget_record.nuggets if nugget.get("importance", "").lower() == "vital"
+                ),
+            }
+        )
+        if nuggets_source is not None:
+            metadata["nuggets_source"] = nuggets_source
+    if rubrics_by_qid is not None:
+        rubric_record = rubrics_by_qid.get(qid)
+        if rubric_record is None:
+            raise ValueError(f"missing rubrics for qid {qid!r}")
+        rubric_prompt = format_rubric_for_prompt(rubric_record)
+        metadata.update(
+            {
+                "rubrics": True,
+                "rubric_qid": qid,
+                "rubric_criteria_count": len(rubric_record.criteria),
+                "mandatory_criteria_count": sum(
+                    1 for criterion in rubric_record.criteria if str(criterion.get("tier", "")).lower() == "mandatory"
+                ),
+            }
+        )
+        if rubrics_source is not None:
+            metadata["rubrics_source"] = rubrics_source
     return {
         "task_id": _task_id(left.run_id, right.run_id, qid),
         "evaluator": "arena",
@@ -208,14 +416,12 @@ def _arena_task(left: AnswerSet, right: AnswerSet, qid: str, *, seed: int) -> di
             query=left_answer.query,
             answer_a=answer_a.answer_text,
             answer_b=answer_b.answer_text,
+            rubrics=rubrics,
+            nuggets=nuggets_prompt,
+            rubric=rubric_prompt,
+            prompt_variant=prompt_variant,
         ),
-        "metadata": {
-            "pair": [left.run_id, right.run_id],
-            "qid": qid,
-            "query": left_answer.query,
-            "assistant_a_run_id": assistant_a_run_id,
-            "assistant_b_run_id": assistant_b_run_id,
-        },
+        "metadata": metadata,
     }
 
 
@@ -227,7 +433,15 @@ def iter_arena_tasks(
     sample_battles_per_topic: int | None = None,
     sample_battles_per_system_per_topic: float | None = None,
     sampling_seed: int | None = None,
+    rubrics: bool = False,
+    nuggets_by_qid: dict[str, NuggetRecord] | None = None,
+    nuggets_source: str | None = None,
+    rubrics_by_qid: dict[str, RubricRecord] | None = None,
+    rubrics_source: str | None = None,
+    prompt_variant: str = "default",
 ) -> list[dict[str, Any]]:
+    if nuggets_by_qid is not None and rubrics_by_qid is not None:
+        raise ValueError("arena task generation accepts either nuggets_by_qid or rubrics_by_qid, not both")
     tasks: list[dict[str, Any]] = []
     sample_seed = seed if sampling_seed is None else sampling_seed
     by_run_id = {answer_set.run_id: answer_set for answer_set in answer_sets}
@@ -249,7 +463,20 @@ def iter_arena_tasks(
                 battles_per_topic=battles_per_topic,
                 seed=sample_seed,
             ):
-                tasks.append(_arena_task(by_run_id[run_a], by_run_id[run_b], qid, seed=seed))
+                tasks.append(
+                    _arena_task(
+                        by_run_id[run_a],
+                        by_run_id[run_b],
+                        qid,
+                        seed=seed,
+                        rubrics=rubrics,
+                        nuggets_by_qid=nuggets_by_qid,
+                        nuggets_source=nuggets_source,
+                        rubrics_by_qid=rubrics_by_qid,
+                        rubrics_source=rubrics_source,
+                        prompt_variant=prompt_variant,
+                    )
+                )
         return tasks
 
     for left, right in combinations(answer_sets, 2):
@@ -262,7 +489,20 @@ def iter_arena_tasks(
             seed=sample_seed,
         )
         for qid in shared_qids:
-            tasks.append(_arena_task(left, right, qid, seed=seed))
+            tasks.append(
+                _arena_task(
+                    left,
+                    right,
+                    qid,
+                    seed=seed,
+                    rubrics=rubrics,
+                    nuggets_by_qid=nuggets_by_qid,
+                    nuggets_source=nuggets_source,
+                    rubrics_by_qid=rubrics_by_qid,
+                    rubrics_source=rubrics_source,
+                    prompt_variant=prompt_variant,
+                )
+            )
     return tasks
 
 

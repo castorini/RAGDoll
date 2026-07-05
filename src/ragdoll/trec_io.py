@@ -87,7 +87,7 @@ def read_trec_answers(path: Path, *, run_id: str | None = None) -> Iterator[dict
     """
     for row in read_jsonl(path):
         metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
-        rid = str(row.get("run_id") or metadata.get("run_id") or metadata.get("team_id") or run_id or "")
+        rid = str(run_id or row.get("run_id") or metadata.get("run_id") or metadata.get("team_id") or "")
         qid = _qid(row)
         topic = str(row.get("topic") or row.get("query") or "")
         sentences = _normalize_sentences(row.get("response") if "response" in row else row.get("answer", []))

@@ -7,6 +7,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from ragdoll.arena.prompts import TIE_VERDICTS
+
 
 def write_csv(path: Path, fieldnames: list[str], rows: Iterable[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,7 +33,7 @@ def pairwise_rows(judgments: Iterable[dict[str, Any]], coverage: list[dict[str, 
             continue
         run_a, run_b = str(pair[0]), str(pair[1])
         preferred = row.get("preferred_run_id")
-        if row.get("judge_verdict") == "Tie":
+        if row.get("judge_verdict") in TIE_VERDICTS:
             counts[(run_a, run_b)]["ties"] += 1
         elif preferred == run_a:
             counts[(run_a, run_b)]["a_wins"] += 1
@@ -73,7 +75,7 @@ def system_counts(judgments: Iterable[dict[str, Any]]) -> dict[str, dict[str, in
         counts[run_a]["n_judgments"] += 1
         counts[run_b]["n_judgments"] += 1
         preferred = row.get("preferred_run_id")
-        if row.get("judge_verdict") == "Tie":
+        if row.get("judge_verdict") in TIE_VERDICTS:
             counts[run_a]["ties"] += 1
             counts[run_b]["ties"] += 1
         elif preferred == run_a:
@@ -97,7 +99,7 @@ def _arena_rank_rows(judgments: Iterable[dict[str, Any]], run_ids: list[str]) ->
         run_a, run_b = str(pair[0]), str(pair[1])
         if run_a not in run_id_set or run_b not in run_id_set:
             continue
-        if row.get("judge_verdict") == "Tie":
+        if row.get("judge_verdict") in TIE_VERDICTS:
             winner = "tie"
         elif row.get("preferred_run_id") == run_a:
             winner = "model_a"

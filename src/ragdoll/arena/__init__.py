@@ -1,26 +1,46 @@
 from ragdoll.arena.flows import compare_all, materialize
 from ragdoll.arena.metrics import fit_arena_ratings, leaderboard_rows, pairwise_rows
-from ragdoll.arena.prompts import ARENA_JUDGE_PROMPT, parse_verdict, render_arena_prompt
+from ragdoll.arena.prompts import (
+    ARENA_JUDGE_PROMPT,
+    ARENA_JUDGE_PROMPT_W_NUGGETS,
+    ARENA_JUDGE_PROMPT_W_RUBRICS,
+    ARENA_JUDGE_PROMPT_W_RUBRICS_AND_NUGGETS,
+    ARENA_JUDGE_PROMPT_W_TOPIC_RUBRIC,
+    parse_verdict,
+    render_arena_prompt,
+)
 from ragdoll.arena.stages import (
     battles_for_system_degree,
     coverage_rows,
+    format_nuggets_for_prompt,
+    format_rubric_for_prompt,
     iter_arena_tasks,
     load_answer_set,
     load_answer_sets,
+    load_nuggets,
+    load_rubrics,
     sampled_pair_qids,
     sampled_topic_pairs,
 )
 
 __all__ = [
     "ARENA_JUDGE_PROMPT",
+    "ARENA_JUDGE_PROMPT_W_NUGGETS",
+    "ARENA_JUDGE_PROMPT_W_RUBRICS",
+    "ARENA_JUDGE_PROMPT_W_RUBRICS_AND_NUGGETS",
+    "ARENA_JUDGE_PROMPT_W_TOPIC_RUBRIC",
     "battles_for_system_degree",
     "compare_all",
     "coverage_rows",
     "fit_arena_ratings",
+    "format_nuggets_for_prompt",
+    "format_rubric_for_prompt",
     "iter_arena_tasks",
     "leaderboard_rows",
     "load_answer_set",
     "load_answer_sets",
+    "load_nuggets",
+    "load_rubrics",
     "materialize",
     "pairwise_rows",
     "parse_verdict",
