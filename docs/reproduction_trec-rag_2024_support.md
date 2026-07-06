@@ -62,7 +62,7 @@ Concatenate the two not-shown-prediction files into one canonical human label
 file:
 
 ```bash
-.venv/bin/python - <<'PY'
+uv run python - <<'PY'
 from pathlib import Path
 
 root = Path("data/trec-rag-2024/human-support-labels")
@@ -98,7 +98,7 @@ The RAG24 official support setup is one citation per sentence. The Webassess fil
 may include extra assessments, so we keep only the first citation per sentence.
 
 ```bash
-.venv/bin/python - <<'PY'
+uv run python - <<'PY'
 import json
 from pathlib import Path
 
@@ -159,7 +159,7 @@ This is the expensive/networked step. We used `openai-codex/gpt-5.5`, the
 current support prompt, and one task per valid first citation.
 
 ```bash
-.venv/bin/python -m pi_trec.cli support judge \
+uv run ragdoll support judge \
   --input-file data/trec-rag-2024/ragdoll-support-input/rag24_empty_ragdoll_support_input_from_human_labels.jsonl \
   --output-file results/support-ragdoll-rag24/rag24_human-label-derived_gpt5.5-original-support-prompt/judgments.parsed.jsonl \
   --raw-events-dir results/support-ragdoll-rag24/rag24_human-label-derived_gpt5.5-original-support-prompt/raw-events \
@@ -181,7 +181,7 @@ labels: FS, PS, NS only
 Then assemble labels onto the judged input:
 
 ```bash
-.venv/bin/python -m pi_trec.cli support assemble \
+uv run ragdoll support assemble \
   --answers-file data/trec-rag-2024/ragdoll-support-input/rag24_empty_ragdoll_support_input_from_human_labels.jsonl \
   --judgments results/support-ragdoll-rag24/rag24_human-label-derived_gpt5.5-original-support-prompt/judgments.parsed.jsonl \
   --output-file results/support-ragdoll-rag24/rag24_human-label-derived_gpt5.5-original-support-prompt/support_assignments.jsonl
@@ -232,11 +232,11 @@ Compute human and RAGDoll metrics:
 OUT=results/support-ragdoll-rag24/rag24_human-label-derived_gpt5.5-original-support-prompt/kendall_first_citation_unjudged_excluded
 mkdir -p $OUT
 
-.venv/bin/python -m pi_trec.cli support metrics \
+uv run ragdoll support metrics \
   --input-file data/trec-rag-2024/human-support-labels/rag24_human_support_labels_first_citation.jsonl \
   --output-file $OUT/human_support_metrics.jsonl
 
-.venv/bin/python -m pi_trec.cli support metrics \
+uv run ragdoll support metrics \
   --input-file results/support-ragdoll-rag24/rag24_human-label-derived_gpt5.5-original-support-prompt/support_assignments_with_incomplete_sentences_first_citation.jsonl \
   --output-file $OUT/ragdoll_support_metrics.jsonl
 ```
@@ -255,7 +255,7 @@ contribute 0 only for run-level aggregation. Topic-average Kendall tau ignores
 missing run-topic rows within each topic.
 
 ```bash
-.venv/bin/python tools/plot_support_kendall.py \
+uv run python tools/plot_support_kendall.py \
   --human-metrics $OUT/human_support_metrics.jsonl \
   --ragdoll-metrics $OUT/ragdoll_support_metrics.jsonl \
   --output-dir $OUT \
@@ -328,4 +328,3 @@ exact agreement: 3,581 / 6,742 = 53.115%
 excluded -1 labels: 50
 missing first citation/prediction: 1,371
 ```
-
