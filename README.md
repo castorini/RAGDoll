@@ -13,6 +13,12 @@ the corresponding UMBRELA, Nuggetizer, and support-evaluation workflows where
 possible; materialized prompt-task JSONL files are mainly for debugging and
 reproducible runs.
 
+# Reproduction Guides
+
+- [TREC RAG 2024 end-to-end reproduction](docs/reproduction_trec-rag_2024.md)
+- [TREC RAG 2024 support-metric reproduction](docs/reproduction_trec-rag_2024_support.md)
+- [TREC RAG and Search Arena side-by-side reproduction](docs/reproduction_side-by-side_arena.md)
+
 # Generating Gold Standard
 
 ## Qrels Generation
@@ -328,8 +334,6 @@ answer file is one system/run, using either the normalized `answers` schema from
 `materialize trec-answers` or official TREC RAG rows. Sentence-level
 `answer[].text` fields are concatenated into plain answer text for the judge;
 citations and references are not rendered in the prompt.
-For the full side-by-side commands used in the TREC RAG and Search Arena runs,
-see [`docs/reproduction_side-by-side_arena.md`](docs/reproduction_side-by-side_arena.md).
 
 ```bash
 uv run ragdoll arena compare-all \
@@ -337,11 +341,37 @@ uv run ragdoll arena compare-all \
   --output-dir results/arena \
   --model openai-codex/gpt-5.5 \
   --thinking medium \
+  --prompt-variant rich-human-voter \
   --overwrite
 ```
 
 `--answers-dir` loads all `*.jsonl` files in sorted filename order. For a small
-ad hoc run, pass repeated `--answers <file>` flags instead.
+ad hoc run, pass repeated `--answers <file>` flags instead. The native arena
+judge uses `--prompt-variant rich-human-voter`, which is the final prompt used
+for the reported no-rubric TREC RAG runs.
+
+Add `--rubric-file <jsonl>` to use weighted, topic-specific rubric criteria
+with the rubric-guided arena judge:
+
+```bash
+uv run ragdoll arena compare-all \
+  --answers-dir answers/ \
+  --rubric-file rubric.jsonl \
+  --prompt-variant coverage-count \
+  --output-dir results/arena-rubric \
+  --model openai-codex/gpt-5.5 \
+  --thinking medium \
+  --overwrite
+```
+
+The rubric file should contain one JSONL row per topic with `qid` and
+`criteria`; each criterion should include `text`, and may include `tier`,
+`weight`, `type`, and `source_nugget`. The `coverage-count` prompt is the final
+rubric-guided prompt used for the reported TREC RAG rubric runs.
+
+The full TREC RAG and Search Arena side-by-side experiments use fixed prompt
+variants, model settings, seeds, and answer/rubric subsets. This overview stays
+focused on the interface and output schema.
 
 For every pair of systems, RAGDoll compares only shared `qid`s and never mixes
 answers from different questions. Assistant A/B display order is randomized per
@@ -402,7 +432,8 @@ Materialize exact judge prompts without running Pi:
 ```bash
 uv run ragdoll materialize arena \
   --answers-dir answers/ \
-  --output-file results/arena.tasks.jsonl
+  --output-file results/arena.tasks.jsonl \
+  --prompt-variant rich-human-voter
 ```
 
 # Shared Setup And Operations
@@ -485,10 +516,12 @@ Required fields such as `input_file` and `output_file` may be supplied through
 either the YAML file or CLI flags. Unknown YAML keys are ignored, so one shared
 file can hold settings for several commands.
 
-## Castorini Wrapper
+## Search API Wrapper
 
-RAGDoll can expose a search API endpoint as the Pine-compatible `pi-search`
-`http-json` backend contract:
+RAGDoll can expose a Castorini-style search API endpoint as the
+Pine-compatible `pi-search` `http-json` backend contract. Use this when
+agentic nugget creation needs search/read-document tools backed by the same
+corpus used for evaluation:
 
 ```bash
 uv run ragdoll serve castorini-wrapper \
@@ -505,6 +538,11 @@ The wrapper serves:
 - `POST /search`: search requests mapped to the upstream `/v1/<index>/search`.
 - `POST /read_document`: document reads mapped to the upstream `/v1/<index>/doc/<docid>`.
 - `GET /pi_search_config`: the `PI_SEARCH_EXTENSION_CONFIG` JSON for the Pi search extension.
+
+The same backend adapter is also used by `support resolve-references
+--api-base-url ...` to attach cited passage text before support judging. If
+Pyserini is available locally, `support resolve-references --index ...` can read
+directly from a local or prebuilt Lucene index instead.
 
 Protected search APIs read bearer tokens from `CASTORINI_API_TOKEN` by
 default; override that with `--token-env`. The token is never passed as a flag:
@@ -529,122 +567,6 @@ uv run ragdoll doctor --probe
 uv run ragdoll validate --input-file data/TREC2024/assignment-nist5/nuggets.jsonl
 uv run ragdoll cost --raw-events-dir results/metrics/../raw-events \
   --input-price 0.25 --output-price 2.0
-```
-
-## Arena System Comparison
-
-Rank a set of RAG systems with Search Arena-style pairwise LLM judgments. Each
-answer file is one system/run, using either the normalized `answers` schema
-from `materialize trec-answers` or official TREC RAG rows. Sentence-level
-`answer[].text` fields are concatenated into plain answer text for the judge;
-citations and references are not rendered in the prompt.
-For the full side-by-side commands used in the TREC RAG and Search Arena runs,
-see [`docs/reproduction_side-by-side_arena.md`](docs/reproduction_side-by-side_arena.md).
-
-```bash
-uv run ragdoll arena compare-all \
-  --answers-dir answers/ \
-  --output-dir results/arena \
-  --model openai-codex/gpt-5.5 \
-  --thinking medium \
-  --prompt-variant rich-human-voter \
-  --overwrite
-```
-
-`--answers-dir` loads all `*.jsonl` files in sorted filename order. For a small
-ad hoc run, pass repeated `--answers <file>` flags instead. The native arena
-judge uses `--prompt-variant rich-human-voter`, which is the final prompt used
-for the reported no-rubric TREC RAG runs.
-
-Add `--rubric-file <jsonl>` to use weighted, topic-specific rubric criteria
-with the rubric-guided arena judge:
-
-```bash
-uv run ragdoll arena compare-all \
-  --answers-dir answers/ \
-  --rubric-file rubric.jsonl \
-  --prompt-variant coverage-count \
-  --output-dir results/arena-rubric \
-  --model openai-codex/gpt-5.5 \
-  --thinking medium \
-  --overwrite
-```
-
-The rubric file should contain one JSONL row per topic with `qid` and
-`criteria`; each criterion should include `text`, and may include `tier`,
-`weight`, `type`, and `source_nugget`. The `coverage-count` prompt is the final
-rubric-guided prompt used for the reported TREC RAG rubric runs.
-
-The full TREC RAG and Search Arena side-by-side experiments use fixed prompt
-variants, model settings, seeds, and answer/rubric subsets. The exact
-reproduction commands are kept in
-[`docs/reproduction_side-by-side_arena.md`](docs/reproduction_side-by-side_arena.md)
-so this overview stays focused on the interface and output schema.
-
-For every pair of systems, RAGDoll compares only shared `qid`s and never mixes
-answers from different questions. Assistant A/B display order is randomized per
-task from `--seed` and recorded in `judgments.jsonl`, so `[[A]]`/`[[B]]` verdicts
-can be mapped back to the original `run_id`. The output directory contains
-`tasks.jsonl`, `judgments.jsonl`, `pairwise.csv`, `coverage.csv`,
-`leaderboard.csv`, and `raw-events/`. The headline ranking is an Arena-style
-rating fit from the pairwise judgments; pairwise preference rates are
-diagnostics.
-
-To reduce judge cost, sample a fixed number of shared topics per system pair
-before materialization or judging:
-
-```bash
-uv run ragdoll arena compare-all \
-  --answers-dir answers/ \
-  --output-dir results/arena-k5 \
-  --sample-topics-per-pair 5 \
-  --sampling-seed 13 \
-  --model openai-codex/gpt-5.5
-```
-
-The same flags work with `materialize arena`; sampling is deterministic per
-system pair and never compares answers from different `qid`s.
-
-For a more Chatbot Arena-like sparse comparison graph, sample battles within
-each topic instead. This targets a fixed number of battle appearances per
-available system per topic:
-
-```bash
-uv run ragdoll arena compare-all \
-  --answers-dir answers/ \
-  --output-dir results/arena-d2 \
-  --sample-battles-per-system-per-topic 2 \
-  --sampling-seed 13 \
-  --model openai-codex/gpt-5.5
-```
-
-With 76 systems, `--sample-battles-per-system-per-topic 2` materializes about
-76 battles per topic; with 102 systems, it materializes about 102 battles per
-topic. RAGDoll also supports the absolute `--sample-battles-per-topic <n>` flag
-for fixed-size experiments. The topic and battle sampling flags are mutually
-exclusive.
-
-The judging workflow and stored verdicts are independent of the ranking backend:
-`judgments.jsonl` records the same pairwise `[[A]]`, `[[B]]`, and `[[Tie]]`
-outcomes, while `leaderboard.csv` converts those outcomes into Arena ratings.
-Leaderboard rows contain `rank`, `run_id`, `arena_score`, `n_judgments`, `wins`,
-`losses`, and `ties`.
-
-Arena scores are fit with the `arena-rank` package from LMArena
-(<https://github.com/lmarena/arena-rank>). RAGDoll converts each valid
-judgment into the package's standard `model_a`, `model_b`, `winner` schema, with
-wins as `model_a`/`model_b` and ties as `tie`. `arena-rank` then fits the
-Bradley-Terry/logistic paired-comparison model and reports ratings on an
-Elo-like Arena scale centered at `1000`, with `400` points corresponding to one
-base-10 log-odds unit.
-
-Materialize exact judge prompts without running Pi:
-
-```bash
-uv run ragdoll materialize arena \
-  --answers-dir answers/ \
-  --output-file results/arena.tasks.jsonl \
-  --prompt-variant rich-human-voter
 ```
 
 ## Data
