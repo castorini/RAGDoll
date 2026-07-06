@@ -25,7 +25,9 @@ Source: <https://trec.nist.gov/data/rag2024.html> (files under
 | `nugget_assignment.20241218.jsonl` | gold-standard source (pool + answers + human assignments) |
 | `topics.rag24.test.txt` | topic text |
 | `2024-retrieval-qrels.txt` | relevant passages |
-| `final.citation_judgments_with_prediction.20241025.jsonl` | human support reference |
+| `final.citation_judgments_with_prediction.20241025.jsonl` | official support reference for participant-run scoring |
+| `final.citation_judgments_without_prediction.20241025.jsonl` | human support labels for RAGDoll-vs-human support plots |
+| `final.citation_judgments_Webassess.20241031.jsonl` | additional not-shown-prediction support labels for RAGDoll-vs-human support plots |
 
 Not on NIST, only for the optional methods: MS MARCO v2.1 corpus + UMBRELA
 passage qrels (<https://trec-rag.github.io/annoucements/umbrela-qrels/>) for the
@@ -41,6 +43,8 @@ curl -sO $BASE/topics.rag24.test.txt
 curl -sO $BASE/nugget_assignment.20241218.jsonl
 curl -sO $BASE/2024-retrieval-qrels.txt
 curl -sO $BASE/final.citation_judgments_with_prediction.20241025.jsonl
+curl -sO $BASE/final.citation_judgments_without_prediction.20241025.jsonl
+curl -sO $BASE/final.citation_judgments_Webassess.20241031.jsonl
 cd -
 ```
 
@@ -159,6 +163,8 @@ Output: one row per topic with weighted `criteria` (`type`, `tier`, `weight`,
 Needs the raw run submissions (with `references`); the flattened `answers.jsonl`
 drops `references`.
 
+### Score participant runs
+
 ```bash
 uv run ragdoll support resolve-references \
   --input-file runs/2024/example-run.jsonl \
@@ -184,6 +190,138 @@ uv run ragdoll support metrics \
 Output: one row per `(topic_id, run_id)` with weighted/hard precision and recall.
 Human reference `final.citation_judgments_with_prediction.20241025.jsonl` has the
 same schema as `support assemble`, so score it through `support metrics` too.
+
+<details>
+<summary><strong>Reproduce RAGDoll-vs-human support plots</strong></summary>
+
+For the paper support plots, compare RAGDoll to NIST labels where the assessor
+was **not** shown the prediction. Keep only the first citation per answer
+sentence, exclude `-1` labels from metric denominators, and compare RAGDoll and
+human labels on the same first-citation sentence/citation scaffold.
+
+Concatenate the two not-shown-prediction files:
+
+```bash
+mkdir -p data/TREC2024/support-human
+
+uv run python - <<'PY'
+from pathlib import Path
+
+src = Path("downloads/2024")
+out_dir = Path("data/TREC2024/support-human")
+inputs = [
+    src / "final.citation_judgments_without_prediction.20241025.jsonl",
+    src / "final.citation_judgments_Webassess.20241031.jsonl",
+]
+out = out_dir / "rag24_human_support_labels.jsonl"
+
+with out.open("w", encoding="utf-8") as writer:
+    for path in inputs:
+        for line in path.open(encoding="utf-8"):
+            if line.strip():
+                writer.write(line)
+
+print(out)
+PY
+```
+
+Keep only the first citation per answer sentence:
+
+```bash
+uv run python - <<'PY'
+import json
+from pathlib import Path
+
+root = Path("data/TREC2024/support-human")
+src = root / "rag24_human_support_labels.jsonl"
+out = root / "rag24_human_support_labels_first_citation.jsonl"
+
+with src.open(encoding="utf-8") as reader, out.open("w", encoding="utf-8") as writer:
+    for line in reader:
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        for sentence in row.get("sentences", []):
+            citations = sentence.get("citations") or []
+            sentence["citations"] = citations[:1]
+        writer.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+print(out)
+PY
+```
+
+Judge the empty RAGDoll support input built from valid first-citation human
+labels. This file has no support labels; it keeps the answer sentence, citation
+reference, and resolved segment text:
+
+```bash
+RUN=results/TREC2024/support-human/ragdoll-from-human-labels-gpt55
+
+uv run ragdoll support judge \
+  --input-file data/TREC2024/support-human/rag24_empty_ragdoll_support_input_from_human_labels.jsonl \
+  --output-file $RUN/judgments.parsed.jsonl \
+  --raw-events-dir $RUN/raw-events \
+  --provider pi \
+  --model openai-codex/gpt-5.5 \
+  --thinking medium \
+  --max-concurrency 8 \
+  --timeout-seconds 900 \
+  --resume
+```
+
+Assemble labels onto the judged input:
+
+```bash
+uv run ragdoll support assemble \
+  --answers-file data/TREC2024/support-human/rag24_empty_ragdoll_support_input_from_human_labels.jsonl \
+  --judgments $RUN/judgments.parsed.jsonl \
+  --output-file $RUN/support_assignments.jsonl
+```
+
+For metric comparison, align RAGDoll predictions back to the 930-row human
+first-citation scaffold, preserving the `-1` holes:
+
+```text
+$RUN/support_assignments_with_incomplete_sentences_first_citation.jsonl
+```
+
+Compute human and RAGDoll metrics:
+
+```bash
+OUT=$RUN/kendall_first_citation_unjudged_excluded
+mkdir -p $OUT
+
+uv run ragdoll support metrics \
+  --input-file data/TREC2024/support-human/rag24_human_support_labels_first_citation.jsonl \
+  --output-file $OUT/human_support_metrics.jsonl
+
+uv run ragdoll support metrics \
+  --input-file $RUN/support_assignments_with_incomplete_sentences_first_citation.jsonl \
+  --output-file $OUT/ragdoll_support_metrics.jsonl
+```
+
+Generate weighted Kendall plots and CSVs. Run-level aggregation divides by all
+22 RAG24 topics; topic-average Kendall tau ignores missing run-topic rows within
+each topic.
+
+```bash
+uv run python tools/plot_support_kendall.py \
+  --human-metrics $OUT/human_support_metrics.jsonl \
+  --ragdoll-metrics $OUT/ragdoll_support_metrics.jsonl \
+  --output-dir $OUT \
+  --run-level-denominator 22
+```
+
+Expected support-plot headline checks:
+
+```text
+human_support_metrics.jsonl: 930 rows
+ragdoll_support_metrics.jsonl: 930 rows
+weighted_precision run-level tau: 0.854545
+weighted_recall run-level tau: 0.858586
+```
+
+</details>
 
 ## Nugget rubric scoring
 

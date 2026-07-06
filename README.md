@@ -16,7 +16,6 @@ reproducible runs.
 # Reproduction Guides
 
 - [TREC RAG 2024 end-to-end reproduction](docs/reproduction_trec-rag_2024.md)
-- [TREC RAG 2024 support-metric reproduction](docs/reproduction_trec-rag_2024_support.md)
 - [TREC RAG and Search Arena side-by-side reproduction](docs/reproduction_side-by-side_arena.md)
 
 # Generating Gold Standard
