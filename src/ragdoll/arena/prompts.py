@@ -60,7 +60,7 @@ Consider the following dimensions when relevant:
 - Intent and style match: Does the answer address the user's actual request, including the requested format, tone, style, scope, technical level, language, and any explicit constraints?
 - Directness: Does the answer actually answer the question, rather than giving generic background, evasive caveats, or irrelevant information?
 - Usefulness: Does the answer give information the user can act on, apply, or learn from?
-- Completeness: Does the answer cover the important parts of the question without omitting key details the user likely needs? A nugget rubric is provided below with key nuggets, i.e. atomic facts or elements, that would generally appear in a good answer to the user's question. Use it as a guide when assessing completeness, but do not treat it as a rigid checklist.
+- Completeness: Does the answer cover the important parts of the question without omitting key details the user likely needs?
 - Specificity: Does the answer provide concrete details, distinctions, examples, names, numbers, steps, or explanations when they would help?
 - Accuracy and plausibility: Are the claims plausible, internally consistent, and not misleading? Does the answer avoid obvious factual errors, contradictions, fabricated-sounding details, or overconfident claims?
 - Calibration: Does the answer handle uncertainty, assumptions, limitations, and missing information honestly?
@@ -69,7 +69,7 @@ Consider the following dimensions when relevant:
 - Organization: Is the answer easy to use, with helpful structure, ordering, grouping, prioritization, or takeaways?
 - Noise control: Does the answer avoid irrelevant, repetitive, distracting, or filler content?
 
-Use the nugget rubric to inform completeness and accuracy, but do not treat it as a rigid checklist. The user's actual question and information need still matter most. Credit semantically equivalent coverage, and only credit nuggets that are covered accurately and relevantly.
+Use the nugget rubric to inform your judgment on any of the above answer qualities it captures, taking into account how its items are described, categorized, and prioritized, but do not treat it as a rigid checklist or scorecard. The user's actual question and information need still matter most. Credit semantically equivalent satisfaction of rubric items, and only credit rubric items that are addressed accurately and relevantly.
 
 Prefer the answer with greater useful substance for the user's actual need. Do not reward brevity, fluency, confidence, or formatting by itself.
 
