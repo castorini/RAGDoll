@@ -69,7 +69,7 @@ Consider the following dimensions when relevant:
 - Organization: Is the answer easy to use, with helpful structure, ordering, grouping, prioritization, or takeaways?
 - Noise control: Does the answer avoid irrelevant, repetitive, distracting, or filler content?
 
-Use the nugget rubric to inform completeness and accuracy, but prioritize the user's question if the rubric is incomplete, imperfect, or in tension with the user's actual request. Credit semantically equivalent coverage, and only credit nuggets that are covered accurately and relevantly.
+Use the nugget rubric to inform completeness and accuracy, but do not treat it as a rigid checklist. The user's actual question and information need still matter most. Credit semantically equivalent coverage, and only credit nuggets that are covered accurately and relevantly.
 
 Prefer the answer with greater useful substance for the user's actual need. Do not reward brevity, fluency, confidence, or formatting by itself.
 

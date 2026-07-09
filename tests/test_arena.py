@@ -156,7 +156,10 @@ def test_arena_prompt_can_include_topic_rubric() -> None:
     assert "[The Start of Nugget Rubric]" in with_rubric
     assert "1. [mandatory, weight=5] Important criterion" in with_rubric
     assert "Topic Nuggets" not in with_rubric
-    assert "Use the nugget rubric to inform completeness and accuracy" in with_rubric
+    assert (
+        "Use the nugget rubric to inform completeness and accuracy, but do not treat it as a rigid checklist. "
+        "The user's actual question and information need still matter most."
+    ) in with_rubric
     assert "[[Tie (bothbad)]]" in with_rubric
 
 
@@ -565,7 +568,10 @@ def test_materialize_arena_cli_accepts_rubric_file(tmp_path: Path, monkeypatch) 
 
     row = json.loads(output.read_text(encoding="utf-8"))
     assert "Nugget Rubric" in row["instruction"]
-    assert "Use the nugget rubric to inform completeness and accuracy" in row["instruction"]
+    assert (
+        "Use the nugget rubric to inform completeness and accuracy, but do not treat it as a rigid checklist. "
+        "The user's actual question and information need still matter most."
+    ) in row["instruction"]
     assert "[mandatory, weight=5] Important criterion" in row["instruction"]
     assert row["metadata"]["rubrics"] is True
     assert row["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS"
