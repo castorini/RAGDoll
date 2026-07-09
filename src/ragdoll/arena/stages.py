@@ -290,7 +290,6 @@ def _arena_task(
     seed: int,
     rubrics_by_qid: dict[str, RubricRecord] | None = None,
     rubrics_source: str | None = None,
-    prompt_variant: str = "default",
 ) -> dict[str, Any]:
     left_answer = left.rows_by_qid[qid]
     right_answer = right.rows_by_qid[qid]
@@ -306,9 +305,8 @@ def _arena_task(
         "query": left_answer.query,
         "assistant_a_run_id": assistant_a_run_id,
         "assistant_b_run_id": assistant_b_run_id,
+        "prompt": "PAIRWISE_ANSWER_COMPARISON_NAIVE",
     }
-    if prompt_variant != "default":
-        metadata["prompt_variant"] = prompt_variant
     rubric_prompt = None
     if rubrics_by_qid is not None:
         rubric_record = rubrics_by_qid.get(qid)
@@ -317,6 +315,7 @@ def _arena_task(
         rubric_prompt = format_rubric_for_prompt(rubric_record)
         metadata.update(
             {
+                "prompt": "PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS",
                 "rubrics": True,
                 "rubric_qid": qid,
                 "rubric_criteria_count": len(rubric_record.criteria),
@@ -336,7 +335,6 @@ def _arena_task(
             answer_a=answer_a.answer_text,
             answer_b=answer_b.answer_text,
             rubric=rubric_prompt,
-            prompt_variant=prompt_variant,
         ),
         "metadata": metadata,
     }
@@ -352,7 +350,6 @@ def iter_arena_tasks(
     sampling_seed: int | None = None,
     rubrics_by_qid: dict[str, RubricRecord] | None = None,
     rubrics_source: str | None = None,
-    prompt_variant: str = "default",
 ) -> list[dict[str, Any]]:
     tasks: list[dict[str, Any]] = []
     sample_seed = seed if sampling_seed is None else sampling_seed
@@ -383,7 +380,6 @@ def iter_arena_tasks(
                         seed=seed,
                         rubrics_by_qid=rubrics_by_qid,
                         rubrics_source=rubrics_source,
-                        prompt_variant=prompt_variant,
                     )
                 )
         return tasks
@@ -406,7 +402,6 @@ def iter_arena_tasks(
                     seed=seed,
                     rubrics_by_qid=rubrics_by_qid,
                     rubrics_source=rubrics_source,
-                    prompt_variant=prompt_variant,
                 )
             )
     return tasks

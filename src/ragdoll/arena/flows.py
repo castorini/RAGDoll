@@ -33,7 +33,6 @@ def materialize(config: MaterializeArenaConfig) -> None:
         sampling_seed=config.sampling_seed,
         rubrics_by_qid=rubrics_by_qid,
         rubrics_source=str(config.rubrics_file) if config.rubrics_file is not None else None,
-        prompt_variant=config.prompt_variant,
     )
     count = write_jsonl(config.output_file, tasks)
     print(f"wrote={count} output={config.output_file}")
@@ -116,7 +115,6 @@ async def compare_all(config: ArenaCompareAllConfig) -> None:
         sampling_seed=config.sampling_seed,
         rubrics_by_qid=rubrics_by_qid,
         rubrics_source=str(config.rubrics_file) if config.rubrics_file is not None else None,
-        prompt_variant=config.prompt_variant,
     )
 
     if config.dry_run:
