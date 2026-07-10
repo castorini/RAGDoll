@@ -206,11 +206,11 @@ def format_rubric_for_prompt(rubric_record: RubricRecord) -> str:
         weight = criterion.get("weight")
         criterion_type = str(criterion.get("type", "")).strip()
         if tier:
-            labels.append(tier)
+            labels.append(f"tier={tier}")
         if weight is not None:
             labels.append(f"weight={weight}")
         if criterion_type:
-            labels.append(criterion_type)
+            labels.append(f"criterion_type={criterion_type}")
         label = f" [{', '.join(labels)}]" if labels else ""
         lines.append(f"{index}.{label} {criterion['text']}")
     return "\n".join(lines)

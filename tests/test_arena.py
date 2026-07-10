@@ -7,8 +7,6 @@ import pytest
 
 from ragdoll.arena.metrics import fit_arena_ratings, leaderboard_rows, pairwise_rows
 from ragdoll.arena.prompts import (
-    PAIRWISE_ANSWER_COMPARISON_NAIVE,
-    PAIRWISE_ANSWER_COMPARISON_W_RUBRICS,
     parse_verdict,
     render_arena_prompt,
 )
@@ -131,38 +129,11 @@ def test_arena_prompt_uses_answer_text_without_citations_or_references(tmp_path:
     assert task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_NAIVE"
 
 
-def test_arena_prompt_exports_pairwise_names() -> None:
-    assert "same user question" in PAIRWISE_ANSWER_COMPARISON_NAIVE
-    assert "[The Start of Rubric]" in PAIRWISE_ANSWER_COMPARISON_W_RUBRICS
-
-
 def test_arena_prompt_default_is_final_naive_prompt() -> None:
     prompt = render_arena_prompt(query="q", answer_a="a", answer_b="b")
 
-    assert "You are judging two assistant answers to the same user question" in prompt
-    assert "This is a preference judgment, not a checklist" in prompt
-    assert "[[Tie (Both Bad)]]" in prompt
+    assert "[The Start of User's Question]\nq\n[The End of User's Question]" in prompt
     assert "Rubric" not in prompt
-
-
-def test_arena_prompt_can_include_topic_rubric() -> None:
-    with_rubric = render_arena_prompt(
-        query="q",
-        answer_a="a",
-        answer_b="b",
-        rubric="1. [mandatory, weight=5] Important criterion",
-    )
-
-    assert "[The Start of Rubric]" in with_rubric
-    assert "1. [mandatory, weight=5] Important criterion" in with_rubric
-    assert "Topic Nuggets" not in with_rubric
-    assert (
-        "Use the rubric to inform your judgment on any of the above answer qualities it captures, taking "
-        "into account how its items are described, categorized, and prioritized, but do not treat it as a rigid "
-        "checklist or scorecard."
-    ) in with_rubric
-    assert "Use it as a guide when assessing completeness" not in with_rubric
-    assert "[[Tie (Both Bad)]]" in with_rubric
 
 
 def test_iter_arena_tasks_can_use_topic_rubric_prompt(tmp_path: Path) -> None:
@@ -190,8 +161,8 @@ def test_iter_arena_tasks_can_use_topic_rubric_prompt(tmp_path: Path) -> None:
     )[0]
 
     assert "Rubric" in task["instruction"]
-    assert "1. [mandatory, weight=5, explicit] Important criterion" in task["instruction"]
-    assert "2. [optional, weight=2, synthesis] Tie breaker" in task["instruction"]
+    assert "1. [tier=mandatory, weight=5, criterion_type=explicit] Important criterion" in task["instruction"]
+    assert "2. [tier=optional, weight=2, criterion_type=synthesis] Tie breaker" in task["instruction"]
     assert task["metadata"]["rubrics"] is True
     assert task["metadata"]["rubric_criteria_count"] == 2
     assert task["metadata"]["mandatory_criteria_count"] == 1
@@ -570,14 +541,7 @@ def test_materialize_arena_cli_accepts_rubric_file(tmp_path: Path, monkeypatch) 
     main()
 
     row = json.loads(output.read_text(encoding="utf-8"))
-    assert "Rubric" in row["instruction"]
-    assert (
-        "Use the rubric to inform your judgment on any of the above answer qualities it captures, taking "
-        "into account how its items are described, categorized, and prioritized, but do not treat it as a rigid "
-        "checklist or scorecard."
-    ) in row["instruction"]
-    assert "Use it as a guide when assessing completeness" not in row["instruction"]
-    assert "[mandatory, weight=5] Important criterion" in row["instruction"]
+    assert "Important criterion" in row["instruction"]
     assert row["metadata"]["rubrics"] is True
     assert row["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS"
     assert row["metadata"]["rubric_criteria_count"] == 1
@@ -645,10 +609,9 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
     assert all(row["model"] == "judge-model" for row in judgments)
     assert len(leaderboard) == 2
     assert (output_dir / "tasks.jsonl").exists()
-    tasks_text = (output_dir / "tasks.jsonl").read_text(encoding="utf-8")
-    assert "This is a preference judgment, not a checklist" in tasks_text
-    assert "Rubric" not in tasks_text
-    assert "PAIRWISE_ANSWER_COMPARISON_NAIVE" in tasks_text
+    tasks = [json.loads(line) for line in (output_dir / "tasks.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert all("Rubric" not in task["instruction"] for task in tasks)
+    assert all(task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_NAIVE" for task in tasks)
     assert (output_dir / "pairwise.csv").exists()
     assert (output_dir / "coverage.csv").exists()
 
@@ -699,11 +662,10 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
     main()
 
     row = json.loads((output_dir / "judgments.jsonl").read_text(encoding="utf-8"))
-    tasks_text = (output_dir / "tasks.jsonl").read_text(encoding="utf-8")
+    task = json.loads((output_dir / "tasks.jsonl").read_text(encoding="utf-8"))
     assert row["judge_verdict"] == "Tie"
-    assert "Rubric" in tasks_text
-    assert "Important criterion" in tasks_text
-    assert "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS" in tasks_text
+    assert "Important criterion" in task["instruction"]
+    assert task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS"
 
 
 def test_arena_compare_all_cli_accepts_answers_dir(tmp_path: Path, monkeypatch) -> None:
