@@ -24,7 +24,7 @@ Consider the following dimensions when relevant:
 
 Prefer the answer with greater useful substance for the user's actual need. Do not reward brevity, fluency, confidence, or formatting by itself.
 
-Choose "[[Tie]]" when neither answer is meaningfully preferable and both answers are at least acceptable. Choose "[[Tie (bothbad)]]" when neither answer is meaningfully preferable because both answers are bad, unusable, substantially incorrect, unsafe, evasive, or fail the user's request in a similar way.
+Choose "[[Tie]]" when neither answer is meaningfully preferable and both answers are at least acceptable. Choose "[[Tie (Both Bad)]]" when neither answer is meaningfully preferable because both answers are bad, unusable, substantially incorrect, unsafe, evasive, or fail the user's request in a similar way.
 
 Do not choose a tie merely because both answers have strengths or both have weaknesses. If one answer is meaningfully more useful, accurate, complete, or better matched to the user's intent, choose that answer, even if both answers are imperfect.
 
@@ -32,7 +32,7 @@ Output your final verdict by strictly following this format:
 "[[A]]" if Assistant A is better,
 "[[B]]" if Assistant B is better,
 "[[Tie]]" if they are effectively tied and both are at least acceptable,
-"[[Tie (bothbad)]]" if they are effectively tied because both are bad.
+"[[Tie (Both Bad)]]" if they are effectively tied because both are bad.
 
 Do not include any explanation, reasoning, or additional text outside the verdict.
 
@@ -49,7 +49,7 @@ Do not include any explanation, reasoning, or additional text outside the verdic
 [The End of Assistant B's Answer]
 """
 
-PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS = """You are judging two assistant answers to the same user question. Read the user's question, the nugget rubric, and both answers carefully, infer what the user is trying to accomplish, and choose the answer the user would rather receive.
+PAIRWISE_ANSWER_COMPARISON_W_RUBRICS = """You are judging two assistant answers to the same user question. Read the user's question, the rubric, and both answers carefully, infer what the user is trying to accomplish, and choose the answer the user would rather receive.
 
 This is a preference judgment, not a checklist. Judge each answer by the qualities that matter for this specific request. Prefer the answer that is more useful, better matched to the user's intent, more complete where completeness matters, and more trustworthy.
 
@@ -69,11 +69,11 @@ Consider the following dimensions when relevant:
 - Organization: Is the answer easy to use, with helpful structure, ordering, grouping, prioritization, or takeaways?
 - Noise control: Does the answer avoid irrelevant, repetitive, distracting, or filler content?
 
-Use the nugget rubric to inform your judgment on any of the above answer qualities it captures, taking into account how its items are described, categorized, and prioritized, but do not treat it as a rigid checklist or scorecard. The user's actual question and information need still matter most. Credit semantically equivalent satisfaction of rubric items, and only credit rubric items that are addressed accurately and relevantly.
+Use the rubric to inform your judgment on any of the above answer qualities it captures, taking into account how its items are described, categorized, and prioritized, but do not treat it as a rigid checklist or scorecard. The user's actual question and information need still matter most. Credit semantically equivalent satisfaction of rubric items, and only credit rubric items that are addressed accurately and relevantly.
 
 Prefer the answer with greater useful substance for the user's actual need. Do not reward brevity, fluency, confidence, or formatting by itself.
 
-Choose "[[Tie]]" when neither answer is meaningfully preferable and both answers are at least acceptable. Choose "[[Tie (bothbad)]]" when neither answer is meaningfully preferable because both answers are bad, unusable, substantially incorrect, unsafe, evasive, or fail the user's request in a similar way.
+Choose "[[Tie]]" when neither answer is meaningfully preferable and both answers are at least acceptable. Choose "[[Tie (Both Bad)]]" when neither answer is meaningfully preferable because both answers are bad, unusable, substantially incorrect, unsafe, evasive, or fail the user's request in a similar way.
 
 Do not choose a tie merely because both answers have strengths or both have weaknesses. If one answer is meaningfully more useful, accurate, complete, or better matched to the user's intent, choose that answer, even if both answers are imperfect.
 
@@ -81,7 +81,7 @@ Output your final verdict by strictly following this format:
 "[[A]]" if Assistant A is better,
 "[[B]]" if Assistant B is better,
 "[[Tie]]" if they are effectively tied and both are at least acceptable,
-"[[Tie (bothbad)]]" if they are effectively tied because both are bad.
+"[[Tie (Both Bad)]]" if they are effectively tied because both are bad.
 
 Do not include any explanation, reasoning, or additional text outside the verdict.
 
@@ -89,9 +89,9 @@ Do not include any explanation, reasoning, or additional text outside the verdic
 {query}
 [The End of User's Question]
 
-[The Start of Nugget Rubric]
+[The Start of Rubric]
 {rubric}
-[The End of Nugget Rubric]
+[The End of Rubric]
 
 [The Start of Assistant A's Answer]
 {answer_a}
@@ -102,9 +102,9 @@ Do not include any explanation, reasoning, or additional text outside the verdic
 [The End of Assistant B's Answer]
 """
 
-TIE_VERDICTS = frozenset({"Tie", "Tie (bothbad)"})
+TIE_VERDICTS = frozenset({"Tie", "Tie (Both Bad)"})
 
-_VERDICT_RE = re.compile(r"\s*\[\[(A|B|Tie|Tie \(bothbad\))\]\]\s*")
+_VERDICT_RE = re.compile(r"\s*\[\[(A|B|Tie|Tie \(Both Bad\))\]\]\s*")
 
 
 def render_arena_prompt(
@@ -115,7 +115,7 @@ def render_arena_prompt(
     rubric: str | None = None,
 ) -> str:
     if rubric is not None:
-        return PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS.format(
+        return PAIRWISE_ANSWER_COMPARISON_W_RUBRICS.format(
             query=query,
             answer_a=answer_a,
             answer_b=answer_b,

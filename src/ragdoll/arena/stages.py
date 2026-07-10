@@ -315,7 +315,7 @@ def _arena_task(
         rubric_prompt = format_rubric_for_prompt(rubric_record)
         metadata.update(
             {
-                "prompt": "PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS",
+                "prompt": "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS",
                 "rubrics": True,
                 "rubric_qid": qid,
                 "rubric_criteria_count": len(rubric_record.criteria),

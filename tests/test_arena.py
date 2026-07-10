@@ -8,7 +8,7 @@ import pytest
 from ragdoll.arena.metrics import fit_arena_ratings, leaderboard_rows, pairwise_rows
 from ragdoll.arena.prompts import (
     PAIRWISE_ANSWER_COMPARISON_NAIVE,
-    PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS,
+    PAIRWISE_ANSWER_COMPARISON_W_RUBRICS,
     parse_verdict,
     render_arena_prompt,
 )
@@ -133,7 +133,7 @@ def test_arena_prompt_uses_answer_text_without_citations_or_references(tmp_path:
 
 def test_arena_prompt_exports_pairwise_names() -> None:
     assert "same user question" in PAIRWISE_ANSWER_COMPARISON_NAIVE
-    assert "[The Start of Nugget Rubric]" in PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS
+    assert "[The Start of Rubric]" in PAIRWISE_ANSWER_COMPARISON_W_RUBRICS
 
 
 def test_arena_prompt_default_is_final_naive_prompt() -> None:
@@ -141,8 +141,8 @@ def test_arena_prompt_default_is_final_naive_prompt() -> None:
 
     assert "You are judging two assistant answers to the same user question" in prompt
     assert "This is a preference judgment, not a checklist" in prompt
-    assert "[[Tie (bothbad)]]" in prompt
-    assert "Nugget Rubric" not in prompt
+    assert "[[Tie (Both Bad)]]" in prompt
+    assert "Rubric" not in prompt
 
 
 def test_arena_prompt_can_include_topic_rubric() -> None:
@@ -153,16 +153,16 @@ def test_arena_prompt_can_include_topic_rubric() -> None:
         rubric="1. [mandatory, weight=5] Important criterion",
     )
 
-    assert "[The Start of Nugget Rubric]" in with_rubric
+    assert "[The Start of Rubric]" in with_rubric
     assert "1. [mandatory, weight=5] Important criterion" in with_rubric
     assert "Topic Nuggets" not in with_rubric
     assert (
-        "Use the nugget rubric to inform your judgment on any of the above answer qualities it captures, taking "
+        "Use the rubric to inform your judgment on any of the above answer qualities it captures, taking "
         "into account how its items are described, categorized, and prioritized, but do not treat it as a rigid "
         "checklist or scorecard."
     ) in with_rubric
     assert "Use it as a guide when assessing completeness" not in with_rubric
-    assert "[[Tie (bothbad)]]" in with_rubric
+    assert "[[Tie (Both Bad)]]" in with_rubric
 
 
 def test_iter_arena_tasks_can_use_topic_rubric_prompt(tmp_path: Path) -> None:
@@ -189,14 +189,14 @@ def test_iter_arena_tasks_can_use_topic_rubric_prompt(tmp_path: Path) -> None:
         rubrics_source=str(rubrics),
     )[0]
 
-    assert "Nugget Rubric" in task["instruction"]
+    assert "Rubric" in task["instruction"]
     assert "1. [mandatory, weight=5, explicit] Important criterion" in task["instruction"]
     assert "2. [optional, weight=2, synthesis] Tie breaker" in task["instruction"]
     assert task["metadata"]["rubrics"] is True
     assert task["metadata"]["rubric_criteria_count"] == 2
     assert task["metadata"]["mandatory_criteria_count"] == 1
     assert task["metadata"]["rubrics_source"] == str(rubrics)
-    assert task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS"
+    assert task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS"
 
 
 def test_iter_arena_tasks_rejects_missing_topic_rubric(tmp_path: Path) -> None:
@@ -362,9 +362,10 @@ def test_parse_verdict_requires_single_label() -> None:
     assert parse_verdict("[[A]]") == "A"
     assert parse_verdict(" [[B]]\n") == "B"
     assert parse_verdict("[[Tie]]") == "Tie"
-    assert parse_verdict("[[Tie (bothbad)]]") == "Tie (bothbad)"
+    assert parse_verdict("[[Tie (Both Bad)]]") == "Tie (Both Bad)"
     assert parse_verdict("I choose [[A]]") is None
     assert parse_verdict("[[C]]") is None
+    assert parse_verdict("[[Tie (bothbad)]]") is None
     assert parse_verdict("[[Both Good]]") is None
     assert parse_verdict("[[Both Bad]]") is None
 
@@ -372,7 +373,7 @@ def test_parse_verdict_requires_single_label() -> None:
 def test_tie_verdicts_count_as_ties() -> None:
     judgments = [
         {"status": "completed", "pair": ["a", "b"], "judge_verdict": "Tie", "preferred_run_id": None},
-        {"status": "completed", "pair": ["a", "b"], "judge_verdict": "Tie (bothbad)", "preferred_run_id": None},
+        {"status": "completed", "pair": ["a", "b"], "judge_verdict": "Tie (Both Bad)", "preferred_run_id": None},
     ]
     coverage = [{"run_a": "a", "run_b": "b", "shared_topics": 2}]
 
@@ -569,16 +570,16 @@ def test_materialize_arena_cli_accepts_rubric_file(tmp_path: Path, monkeypatch) 
     main()
 
     row = json.loads(output.read_text(encoding="utf-8"))
-    assert "Nugget Rubric" in row["instruction"]
+    assert "Rubric" in row["instruction"]
     assert (
-        "Use the nugget rubric to inform your judgment on any of the above answer qualities it captures, taking "
+        "Use the rubric to inform your judgment on any of the above answer qualities it captures, taking "
         "into account how its items are described, categorized, and prioritized, but do not treat it as a rigid "
         "checklist or scorecard."
     ) in row["instruction"]
     assert "Use it as a guide when assessing completeness" not in row["instruction"]
     assert "[mandatory, weight=5] Important criterion" in row["instruction"]
     assert row["metadata"]["rubrics"] is True
-    assert row["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS"
+    assert row["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS"
     assert row["metadata"]["rubric_criteria_count"] == 1
 
 
@@ -646,7 +647,7 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
     assert (output_dir / "tasks.jsonl").exists()
     tasks_text = (output_dir / "tasks.jsonl").read_text(encoding="utf-8")
     assert "This is a preference judgment, not a checklist" in tasks_text
-    assert "Nugget Rubric" not in tasks_text
+    assert "Rubric" not in tasks_text
     assert "PAIRWISE_ANSWER_COMPARISON_NAIVE" in tasks_text
     assert (output_dir / "pairwise.csv").exists()
     assert (output_dir / "coverage.csv").exists()
@@ -700,9 +701,9 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
     row = json.loads((output_dir / "judgments.jsonl").read_text(encoding="utf-8"))
     tasks_text = (output_dir / "tasks.jsonl").read_text(encoding="utf-8")
     assert row["judge_verdict"] == "Tie"
-    assert "Nugget Rubric" in tasks_text
+    assert "Rubric" in tasks_text
     assert "Important criterion" in tasks_text
-    assert "PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS" in tasks_text
+    assert "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS" in tasks_text
 
 
 def test_arena_compare_all_cli_accepts_answers_dir(tmp_path: Path, monkeypatch) -> None:

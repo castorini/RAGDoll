@@ -362,7 +362,7 @@ uv run ragdoll arena compare-all \
 The rubric file should contain one JSONL row per topic with `qid` and
 `criteria`; each criterion should include `text`, and may include `tier`,
 `weight`, `type`, and `source_nugget`. Supplying `--rubric-file` uses
-`PAIRWISE_ANSWER_COMPARISON_W_NUGGET_RUBRICS`.
+`PAIRWISE_ANSWER_COMPARISON_W_RUBRICS`.
 
 The full TREC RAG and Search Arena side-by-side experiments use fixed prompt
 constants, model settings, seeds, and answer/rubric subsets. This overview stays
