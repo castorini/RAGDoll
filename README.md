@@ -378,6 +378,11 @@ selected prompt constant in `metadata.prompt`. The output directory contains
 rating fit from the pairwise judgments; pairwise preference rates are
 diagnostics.
 
+When `--resume` is used, RAGDoll verifies that the existing and newly generated
+Arena task manifests match before overwriting `tasks.jsonl`. Changed prompts,
+answers, seeds, rubrics, or sampling settings require a new output directory or
+`--overwrite`.
+
 To reduce judge cost, sample a fixed number of shared topics per system pair
 before materialization or judging:
 

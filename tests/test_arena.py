@@ -668,6 +668,55 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
     assert task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS"
 
 
+def test_arena_compare_all_resume_rejects_changed_prompt(tmp_path: Path, monkeypatch) -> None:
+    fake_pi = tmp_path / "fake_pi.py"
+    fake_pi.write_text(
+        """#!/usr/bin/env python3
+import json
+print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"[[Tie]]"}}))
+""",
+        encoding="utf-8",
+    )
+    fake_pi.chmod(0o755)
+    left = _write(tmp_path / "a.jsonl", [{"run_id": "sys-a", "qid": "q1", "query": "q1", "answer_text": "a1"}])
+    right = _write(tmp_path / "b.jsonl", [{"run_id": "sys-b", "qid": "q1", "query": "q1", "answer_text": "b1"}])
+    rubrics = _write(
+        tmp_path / "rubric.jsonl",
+        [{"qid": "q1", "status": "completed", "criteria": [{"text": "Important criterion"}]}],
+    )
+    output_dir = tmp_path / "arena"
+    base_args = [
+        "ragdoll",
+        "arena",
+        "compare-all",
+        "--answers",
+        str(left),
+        "--answers",
+        str(right),
+        "--output-dir",
+        str(output_dir),
+        "--agent-binary",
+        str(fake_pi),
+        "--agent-state-dir",
+        str(tmp_path / "missing"),
+        "--no-cache",
+    ]
+    monkeypatch.setattr(sys, "argv", [*base_args, "--overwrite"])
+    main()
+    original_tasks = (output_dir / "tasks.jsonl").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(sys, "argv", [*base_args, "--resume"])
+    main()
+    assert len((output_dir / "judgments.jsonl").read_text(encoding="utf-8").splitlines()) == 1
+
+    monkeypatch.setattr(sys, "argv", [*base_args, "--rubric-file", str(rubrics), "--resume"])
+    with pytest.raises(ValueError, match="arena task manifest differs"):
+        main()
+
+    assert (output_dir / "tasks.jsonl").read_text(encoding="utf-8") == original_tasks
+    assert len((output_dir / "judgments.jsonl").read_text(encoding="utf-8").splitlines()) == 1
+
+
 def test_arena_compare_all_cli_accepts_answers_dir(tmp_path: Path, monkeypatch) -> None:
     fake_pi = tmp_path / "fake_pi.py"
     fake_pi.write_text(

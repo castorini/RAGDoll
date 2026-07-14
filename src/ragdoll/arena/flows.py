@@ -74,6 +74,58 @@ def _unlink_outputs(output_dir: Path) -> None:
         (output_dir / name).unlink(missing_ok=True)
 
 
+def _task_signature(task: dict[str, Any]) -> tuple[Any, ...]:
+    metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
+    return (
+        task.get("evaluator"),
+        task.get("system_prompt"),
+        task.get("instruction"),
+        metadata.get("prompt"),
+        metadata.get("assistant_a_run_id"),
+        metadata.get("assistant_b_run_id"),
+    )
+
+
+def _validate_resume_manifest(tasks_path: Path, judgments_path: Path, tasks: list[dict[str, Any]]) -> None:
+    if not tasks_path.exists():
+        if judgments_path.exists():
+            raise ValueError(
+                f"cannot resume {judgments_path}: {tasks_path} is missing; "
+                "use the original task manifest, a new output directory, or --overwrite"
+            )
+        return
+
+    existing_tasks = list(read_jsonl(tasks_path))
+    existing_by_id = {str(task.get("task_id", "")): task for task in existing_tasks}
+    current_by_id = {str(task.get("task_id", "")): task for task in tasks}
+    existing_prompts = sorted(
+        {
+            str(task.get("metadata", {}).get("prompt", "unknown"))
+            for task in existing_tasks
+            if isinstance(task.get("metadata"), dict)
+        }
+    )
+    current_prompts = sorted(
+        {
+            str(task.get("metadata", {}).get("prompt", "unknown"))
+            for task in tasks
+            if isinstance(task.get("metadata"), dict)
+        }
+    )
+    mismatched_ids = {
+        task_id
+        for task_id in existing_by_id.keys() & current_by_id.keys()
+        if _task_signature(existing_by_id[task_id]) != _task_signature(current_by_id[task_id])
+    }
+    duplicate_ids = len(existing_by_id) != len(existing_tasks) or len(current_by_id) != len(tasks)
+    if duplicate_ids or existing_by_id.keys() != current_by_id.keys() or mismatched_ids:
+        raise ValueError(
+            f"cannot resume {tasks_path.parent}: arena task manifest differs "
+            f"(existing prompts={existing_prompts}, current prompts={current_prompts}); "
+            "use a new output directory or --overwrite"
+        )
+
+
 def _write_summaries(output_dir: Path, judgments_path: Path, coverage: list[dict[str, Any]], run_ids: list[str]) -> None:
     judgments = list(read_jsonl(judgments_path)) if judgments_path.exists() else []
     write_csv(
@@ -129,6 +181,8 @@ async def compare_all(config: ArenaCompareAllConfig) -> None:
     coverage = coverage_rows(answer_sets)
     tasks_path = output_dir / "tasks.jsonl"
     judgments_path = output_dir / "judgments.jsonl"
+    if config.resume and not config.overwrite:
+        _validate_resume_manifest(tasks_path, judgments_path, tasks)
     write_jsonl(tasks_path, tasks)
 
     selected = select_rows(
