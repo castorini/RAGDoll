@@ -16,7 +16,6 @@ reproducible runs.
 # Reproduction Guides
 
 - [TREC RAG 2024 end-to-end reproduction](docs/reproduction_trec-rag_2024.md)
-- [TREC RAG and Search Arena side-by-side reproduction](docs/reproduction_side-by-side_arena.md)
 
 # Generating Gold Standard
 
@@ -340,14 +339,12 @@ uv run ragdoll arena compare-all \
   --output-dir results/arena \
   --model openai-codex/gpt-5.5 \
   --thinking medium \
-  --prompt-variant rich-human-voter \
   --overwrite
 ```
 
 `--answers-dir` loads all `*.jsonl` files in sorted filename order. For a small
-ad hoc run, pass repeated `--answers <file>` flags instead. The native arena
-judge uses `--prompt-variant rich-human-voter`, which is the final prompt used
-for the reported no-rubric TREC RAG runs.
+ad hoc run, pass repeated `--answers <file>` flags instead. The naive arena
+judge uses `PAIRWISE_ANSWER_COMPARISON_NAIVE`.
 
 Add `--rubric-file <jsonl>` to use weighted, topic-specific rubric criteria
 with the rubric-guided arena judge:
@@ -356,7 +353,6 @@ with the rubric-guided arena judge:
 uv run ragdoll arena compare-all \
   --answers-dir answers/ \
   --rubric-file rubric.jsonl \
-  --prompt-variant coverage-count \
   --output-dir results/arena-rubric \
   --model openai-codex/gpt-5.5 \
   --thinking medium \
@@ -365,21 +361,27 @@ uv run ragdoll arena compare-all \
 
 The rubric file should contain one JSONL row per topic with `qid` and
 `criteria`; each criterion should include `text`, and may include `tier`,
-`weight`, `type`, and `source_nugget`. The `coverage-count` prompt is the final
-rubric-guided prompt used for the reported TREC RAG rubric runs.
+`weight`, `type`, and `source_nugget`. Supplying `--rubric-file` uses
+`PAIRWISE_ANSWER_COMPARISON_W_RUBRICS`.
 
 The full TREC RAG and Search Arena side-by-side experiments use fixed prompt
-variants, model settings, seeds, and answer/rubric subsets. This overview stays
+constants, model settings, seeds, and answer/rubric subsets. This overview stays
 focused on the interface and output schema.
 
 For every pair of systems, RAGDoll compares only shared `qid`s and never mixes
 answers from different questions. Assistant A/B display order is randomized per
 task from `--seed` and recorded in `judgments.jsonl`, so `[[A]]`/`[[B]]`
-verdicts can be mapped back to the original `run_id`. The output directory
-contains `tasks.jsonl`, `judgments.jsonl`, `pairwise.csv`, `coverage.csv`,
+verdicts can be mapped back to the original `run_id`. Each task records the
+selected prompt constant in `metadata.prompt`. The output directory contains
+`tasks.jsonl`, `judgments.jsonl`, `pairwise.csv`, `coverage.csv`,
 `leaderboard.csv`, and `raw-events/`. The headline ranking is an Arena-style
 rating fit from the pairwise judgments; pairwise preference rates are
 diagnostics.
+
+When `--resume` is used, RAGDoll verifies that the existing and newly generated
+Arena task manifests match before overwriting `tasks.jsonl`. Changed prompts,
+answers, seeds, rubrics, or sampling settings require a new output directory or
+`--overwrite`.
 
 To reduce judge cost, sample a fixed number of shared topics per system pair
 before materialization or judging:
@@ -431,8 +433,7 @@ Materialize exact judge prompts without running Pi:
 ```bash
 uv run ragdoll materialize arena \
   --answers-dir answers/ \
-  --output-file results/arena.tasks.jsonl \
-  --prompt-variant rich-human-voter
+  --output-file results/arena.tasks.jsonl
 ```
 
 # Shared Setup And Operations

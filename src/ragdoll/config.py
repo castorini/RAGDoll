@@ -233,7 +233,6 @@ class MaterializeArenaConfig(BaseConfig):
     sample_battles_per_system_per_topic: float | None = None
     sampling_seed: int | None = None
     rubrics_file: Path | None = None
-    prompt_variant: str = "default"
 
     _required: ClassVar[tuple[str, ...]] = ("output_file",)
 
@@ -417,7 +416,6 @@ class ArenaCompareAllConfig(RunConfig):
     sample_battles_per_system_per_topic: float | None = None
     sampling_seed: int | None = None
     rubrics_file: Path | None = None
-    prompt_variant: str = "default"
 
     _required: ClassVar[tuple[str, ...]] = ("output_dir",)
 

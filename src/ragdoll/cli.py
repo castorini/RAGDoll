@@ -160,16 +160,6 @@ def build_parser() -> argparse.ArgumentParser:
     materialize_arena.add_argument("--sample-battles-per-system-per-topic", type=float, default=SUPPRESS)
     materialize_arena.add_argument("--sampling-seed", type=int, default=SUPPRESS)
     materialize_arena.add_argument("--rubric-file", "--rubrics-file", dest="rubrics_file", type=Path, default=SUPPRESS)
-    materialize_arena.add_argument(
-        "--prompt-variant",
-        choices=[
-            "default",
-            "rich-human-voter",
-            "coverage-count",
-        ],
-        default=SUPPRESS,
-        help="Arena prompt variant.",
-    )
     finish(materialize_arena, config_cls=MaterializeArenaConfig, handler=arena.materialize)
 
     umbrela_parser = subparsers.add_parser("umbrela", help="Run UMBRELA-compatible relevance judging.")
@@ -473,16 +463,6 @@ def add_arena_compare_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--answers-dir", type=Path, default=SUPPRESS)
     parser.add_argument("--output-dir", type=Path, default=SUPPRESS)
     parser.add_argument("--rubric-file", "--rubrics-file", dest="rubrics_file", type=Path, default=SUPPRESS)
-    parser.add_argument(
-        "--prompt-variant",
-        choices=[
-            "default",
-            "rich-human-voter",
-            "coverage-count",
-        ],
-        default=SUPPRESS,
-        help="Arena prompt variant.",
-    )
     parser.add_argument("--raw-events-dir", type=Path, default=SUPPRESS)
     parser.add_argument("--agent-binary", default=SUPPRESS)
     parser.add_argument("--provider", default=SUPPRESS)

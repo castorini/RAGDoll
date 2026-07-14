@@ -43,6 +43,7 @@ data/*
 results/
 raw-events/
 scripts/
+tools/
 *.failed.jsonl
 
 # IDE / editor

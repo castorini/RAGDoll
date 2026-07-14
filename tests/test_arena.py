@@ -5,21 +5,22 @@ from pathlib import Path
 
 import pytest
 
-from ragdoll.arena import (
+from ragdoll.arena.metrics import fit_arena_ratings, leaderboard_rows, pairwise_rows
+from ragdoll.arena.prompts import (
+    parse_verdict,
+    render_arena_prompt,
+)
+from ragdoll.arena.stages import (
+    assistant_order,
     battles_for_system_degree,
-    fit_arena_ratings,
+    coverage_rows,
     iter_arena_tasks,
-    leaderboard_rows,
     load_answer_set,
     load_answer_sets,
     load_rubrics,
-    pairwise_rows,
-    parse_verdict,
-    render_arena_prompt,
     sampled_pair_qids,
     sampled_topic_pairs,
 )
-from ragdoll.arena.stages import assistant_order, coverage_rows
 from ragdoll.cli import main
 
 
@@ -125,87 +126,14 @@ def test_arena_prompt_uses_answer_text_without_citations_or_references(tmp_path:
     assert "Right sentence." in task["instruction"]
     assert "DO_NOT_RENDER_CITATION" not in task["instruction"]
     assert "DO_NOT_RENDER_REFERENCE" not in task["instruction"]
+    assert task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_NAIVE"
 
 
-def test_arena_prompt_default_is_final_native_prompt() -> None:
+def test_arena_prompt_default_is_final_naive_prompt() -> None:
     prompt = render_arena_prompt(query="q", answer_a="a", answer_b="b")
 
-    assert "careful human Search Arena voter" in prompt
-    assert "Answer density" in prompt
-    assert "Topic Rubric" not in prompt
-
-
-def test_arena_prompt_can_use_native_prompt_variants() -> None:
-    rich = render_arena_prompt(query="q", answer_a="a", answer_b="b", prompt_variant="rich-human-voter")
-
-    assert "careful human Search Arena voter" in rich
-    assert "Answer density" in rich
-    assert "Topic Rubric" not in rich
-
-
-def test_arena_prompt_rejects_deprecated_native_variants() -> None:
-    with pytest.raises(ValueError, match="unknown native arena prompt variant"):
-        render_arena_prompt(query="q", answer_a="a", answer_b="b", prompt_variant="rich-human-voter-trec")
-
-
-def test_arena_prompt_can_include_topic_rubric() -> None:
-    with_rubric = render_arena_prompt(
-        query="q",
-        answer_a="a",
-        answer_b="b",
-        rubric="1. [mandatory, weight=5] Important criterion",
-    )
-
-    assert "[The Start of Topic Rubric]" in with_rubric
-    assert "1. [mandatory, weight=5] Important criterion" in with_rubric
-    assert "Topic Nuggets" not in with_rubric
-    assert "[[Both Good]]" in with_rubric
-    assert "[[Both Bad]]" in with_rubric
-
-
-def test_arena_prompt_can_use_coverage_count_topic_rubric_variant() -> None:
-    with_rubric = render_arena_prompt(
-        query="q",
-        answer_a="a",
-        answer_b="b",
-        rubric="1. [mandatory, weight=5] Important criterion",
-        prompt_variant="coverage-count",
-    )
-
-    assert "higher strict-vital human nugget score" in with_rubric
-    assert "higher supported mandatory-criterion coverage" in with_rubric
-    assert "[[Both Good]]" in with_rubric
-    assert "[[Both Bad]]" in with_rubric
-
-
-@pytest.mark.parametrize(
-    "variant",
-    [
-        "strict-vital",
-        "dimensions",
-        "checklist",
-        "coverage-quality",
-        "coverage-accuracy-gate",
-        "coverage-helpful-depth",
-        "coverage-compact-dimensions",
-        "coverage-compact-tiebreak",
-        "coverage-compact-calibrated",
-        "support-plus",
-        "balanced-dimensions",
-        "question-first-dimensions",
-        "expert-preference",
-        "strict-support",
-    ],
-)
-def test_arena_prompt_rejects_deprecated_topic_rubric_variants(variant: str) -> None:
-    with pytest.raises(ValueError, match="unknown topic rubric prompt variant"):
-        render_arena_prompt(
-            query="q",
-            answer_a="a",
-            answer_b="b",
-            rubric="1. [mandatory, weight=5] Important criterion",
-            prompt_variant=variant,
-        )
+    assert "[The Start of User's Question]\nq\n[The End of User's Question]" in prompt
+    assert "Rubric" not in prompt
 
 
 def test_iter_arena_tasks_can_use_topic_rubric_prompt(tmp_path: Path) -> None:
@@ -232,47 +160,14 @@ def test_iter_arena_tasks_can_use_topic_rubric_prompt(tmp_path: Path) -> None:
         rubrics_source=str(rubrics),
     )[0]
 
-    assert "Topic Rubric" in task["instruction"]
-    assert "1. [mandatory, weight=5, explicit] Important criterion" in task["instruction"]
-    assert "2. [optional, weight=2, synthesis] Tie breaker" in task["instruction"]
+    assert "Rubric" in task["instruction"]
+    assert "1. [tier=mandatory, weight=5, criterion_type=explicit] Important criterion" in task["instruction"]
+    assert "2. [tier=optional, weight=2, criterion_type=synthesis] Tie breaker" in task["instruction"]
     assert task["metadata"]["rubrics"] is True
     assert task["metadata"]["rubric_criteria_count"] == 2
     assert task["metadata"]["mandatory_criteria_count"] == 1
     assert task["metadata"]["rubrics_source"] == str(rubrics)
-
-
-def test_iter_arena_tasks_records_prompt_variant(tmp_path: Path) -> None:
-    left = _write(tmp_path / "a.jsonl", [{"run_id": "sys-a", "qid": "q1", "query": "q", "answer_text": "a"}])
-    right = _write(tmp_path / "b.jsonl", [{"run_id": "sys-b", "qid": "q1", "query": "q", "answer_text": "b"}])
-    rubrics = _write(
-        tmp_path / "rubric.jsonl",
-        [{"qid": "q1", "status": "completed", "criteria": [{"text": "Important criterion"}]}],
-    )
-
-    task = iter_arena_tasks(
-        load_answer_sets([left, right]),
-        seed=13,
-        rubrics_by_qid=load_rubrics(rubrics),
-        prompt_variant="coverage-count",
-    )[0]
-
-    assert "higher strict-vital human nugget score" in task["instruction"]
-    assert task["metadata"]["prompt_variant"] == "coverage-count"
-
-
-def test_iter_arena_tasks_records_native_prompt_variant(tmp_path: Path) -> None:
-    left = _write(tmp_path / "a.jsonl", [{"run_id": "sys-a", "qid": "q1", "query": "q", "answer_text": "a"}])
-    right = _write(tmp_path / "b.jsonl", [{"run_id": "sys-b", "qid": "q1", "query": "q", "answer_text": "b"}])
-
-    task = iter_arena_tasks(
-        load_answer_sets([left, right]),
-        seed=13,
-        prompt_variant="rich-human-voter",
-    )[0]
-
-    assert "careful human Search Arena voter" in task["instruction"]
-    assert "Topic Rubric" not in task["instruction"]
-    assert task["metadata"]["prompt_variant"] == "rich-human-voter"
+    assert task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS"
 
 
 def test_iter_arena_tasks_rejects_missing_topic_rubric(tmp_path: Path) -> None:
@@ -438,16 +333,18 @@ def test_parse_verdict_requires_single_label() -> None:
     assert parse_verdict("[[A]]") == "A"
     assert parse_verdict(" [[B]]\n") == "B"
     assert parse_verdict("[[Tie]]") == "Tie"
-    assert parse_verdict("[[Both Good]]") == "Both Good"
-    assert parse_verdict("[[Both Bad]]") == "Both Bad"
+    assert parse_verdict("[[Tie (Both Bad)]]") == "Tie (Both Bad)"
     assert parse_verdict("I choose [[A]]") is None
     assert parse_verdict("[[C]]") is None
+    assert parse_verdict("[[Tie (bothbad)]]") is None
+    assert parse_verdict("[[Both Good]]") is None
+    assert parse_verdict("[[Both Bad]]") is None
 
 
-def test_both_good_and_both_bad_count_as_ties() -> None:
+def test_tie_verdicts_count_as_ties() -> None:
     judgments = [
-        {"status": "completed", "pair": ["a", "b"], "judge_verdict": "Both Good", "preferred_run_id": None},
-        {"status": "completed", "pair": ["a", "b"], "judge_verdict": "Both Bad", "preferred_run_id": None},
+        {"status": "completed", "pair": ["a", "b"], "judge_verdict": "Tie", "preferred_run_id": None},
+        {"status": "completed", "pair": ["a", "b"], "judge_verdict": "Tie (Both Bad)", "preferred_run_id": None},
     ]
     coverage = [{"run_a": "a", "run_b": "b", "shared_topics": 2}]
 
@@ -638,19 +535,15 @@ def test_materialize_arena_cli_accepts_rubric_file(tmp_path: Path, monkeypatch) 
             str(output),
             "--rubric-file",
             str(rubrics),
-            "--prompt-variant",
-            "coverage-count",
         ],
     )
 
     main()
 
     row = json.loads(output.read_text(encoding="utf-8"))
-    assert "Topic Rubric" in row["instruction"]
-    assert "higher strict-vital human nugget score" in row["instruction"]
-    assert "[mandatory, weight=5] Important criterion" in row["instruction"]
+    assert "Important criterion" in row["instruction"]
     assert row["metadata"]["rubrics"] is True
-    assert row["metadata"]["prompt_variant"] == "coverage-count"
+    assert row["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS"
     assert row["metadata"]["rubric_criteria_count"] == 1
 
 
@@ -716,9 +609,9 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
     assert all(row["model"] == "judge-model" for row in judgments)
     assert len(leaderboard) == 2
     assert (output_dir / "tasks.jsonl").exists()
-    tasks_text = (output_dir / "tasks.jsonl").read_text(encoding="utf-8")
-    assert "careful human Search Arena voter" in tasks_text
-    assert "Topic Rubric" not in tasks_text
+    tasks = [json.loads(line) for line in (output_dir / "tasks.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert all("Rubric" not in task["instruction"] for task in tasks)
+    assert all(task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_NAIVE" for task in tasks)
     assert (output_dir / "pairwise.csv").exists()
     assert (output_dir / "coverage.csv").exists()
 
@@ -769,10 +662,59 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"
     main()
 
     row = json.loads((output_dir / "judgments.jsonl").read_text(encoding="utf-8"))
-    tasks_text = (output_dir / "tasks.jsonl").read_text(encoding="utf-8")
+    task = json.loads((output_dir / "tasks.jsonl").read_text(encoding="utf-8"))
     assert row["judge_verdict"] == "Tie"
-    assert "Topic Rubric" in tasks_text
-    assert "Important criterion" in tasks_text
+    assert "Important criterion" in task["instruction"]
+    assert task["metadata"]["prompt"] == "PAIRWISE_ANSWER_COMPARISON_W_RUBRICS"
+
+
+def test_arena_compare_all_resume_rejects_changed_prompt(tmp_path: Path, monkeypatch) -> None:
+    fake_pi = tmp_path / "fake_pi.py"
+    fake_pi.write_text(
+        """#!/usr/bin/env python3
+import json
+print(json.dumps({"type":"message_end","message":{"role":"assistant","content":"[[Tie]]"}}))
+""",
+        encoding="utf-8",
+    )
+    fake_pi.chmod(0o755)
+    left = _write(tmp_path / "a.jsonl", [{"run_id": "sys-a", "qid": "q1", "query": "q1", "answer_text": "a1"}])
+    right = _write(tmp_path / "b.jsonl", [{"run_id": "sys-b", "qid": "q1", "query": "q1", "answer_text": "b1"}])
+    rubrics = _write(
+        tmp_path / "rubric.jsonl",
+        [{"qid": "q1", "status": "completed", "criteria": [{"text": "Important criterion"}]}],
+    )
+    output_dir = tmp_path / "arena"
+    base_args = [
+        "ragdoll",
+        "arena",
+        "compare-all",
+        "--answers",
+        str(left),
+        "--answers",
+        str(right),
+        "--output-dir",
+        str(output_dir),
+        "--agent-binary",
+        str(fake_pi),
+        "--agent-state-dir",
+        str(tmp_path / "missing"),
+        "--no-cache",
+    ]
+    monkeypatch.setattr(sys, "argv", [*base_args, "--overwrite"])
+    main()
+    original_tasks = (output_dir / "tasks.jsonl").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(sys, "argv", [*base_args, "--resume"])
+    main()
+    assert len((output_dir / "judgments.jsonl").read_text(encoding="utf-8").splitlines()) == 1
+
+    monkeypatch.setattr(sys, "argv", [*base_args, "--rubric-file", str(rubrics), "--resume"])
+    with pytest.raises(ValueError, match="arena task manifest differs"):
+        main()
+
+    assert (output_dir / "tasks.jsonl").read_text(encoding="utf-8") == original_tasks
+    assert len((output_dir / "judgments.jsonl").read_text(encoding="utf-8").splitlines()) == 1
 
 
 def test_arena_compare_all_cli_accepts_answers_dir(tmp_path: Path, monkeypatch) -> None:
